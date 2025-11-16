@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { SkyboxGenerator } from "@/components/SkyboxGenerator";
-import { ImageUploader } from "@/components/ImageUploader";
+import { DragDropUploader } from "@/components/DragDropUploader";
+import { CubePreview3D } from "@/components/CubePreview3D";
 import { SkyboxPreview } from "@/components/SkyboxPreview";
 import { Separator } from "@/components/ui/separator";
-import { Box } from "lucide-react";
+import { Box, Info } from "lucide-react";
 
 const Index = () => {
   const [skyboxImages, setSkyboxImages] = useState<string[]>([]);
 
   return (
     <div className="min-h-screen py-12 px-4">
-      <div className="max-w-6xl mx-auto space-y-12">
+      <div className="max-w-7xl mx-auto space-y-12">
         {/* Header */}
         <div className="text-center space-y-4 animate-float">
           <div className="flex items-center justify-center gap-3">
@@ -25,21 +26,39 @@ const Index = () => {
         </div>
 
         {/* Main Content */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          <div className="space-y-8">
-            <SkyboxGenerator onGenerated={setSkyboxImages} />
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <DragDropUploader onImagesUploaded={setSkyboxImages} />
             
             <div className="flex items-center gap-4">
               <Separator className="flex-1" />
-              <span className="text-sm text-muted-foreground font-semibold">또는</span>
+              <span className="text-sm text-muted-foreground font-semibold">또는 AI 생성</span>
               <Separator className="flex-1" />
             </div>
             
-            <ImageUploader onImagesUploaded={setSkyboxImages} />
+            <SkyboxGenerator onGenerated={setSkyboxImages} />
+            
+            <SkyboxPreview images={skyboxImages} />
           </div>
 
-          <div className="lg:sticky lg:top-8 h-fit">
-            <SkyboxPreview images={skyboxImages} />
+          <div className="space-y-8">
+            <CubePreview3D images={skyboxImages} />
+            
+            {/* Info Card */}
+            <div className="gradient-card p-6 rounded-xl border border-border/50 space-y-4">
+              <div className="flex items-start gap-3">
+                <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-2 text-sm">
+                  <p className="text-foreground font-semibold">사용 방법</p>
+                  <ul className="space-y-1 text-muted-foreground">
+                    <li>• 각 면에 이미지를 드래그하여 업로드</li>
+                    <li>• 자동으로 512x512 크기로 변환</li>
+                    <li>• 3D로 실시간 프리뷰 확인</li>
+                    <li>• .tex 형식으로 다운로드</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
