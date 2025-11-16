@@ -12,34 +12,78 @@ export const ImageUploader = ({ onImagesUploaded }: ImageUploaderProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
     if (files.length !== 6) {
       toast({
         title: "6개의 이미지를 선택하세요",
-        description: "스카이박스는 정확히 6면이 필요합니다",
+        description: "스카이박스는 정확히 6면이 필요합니다 (순서: 위, 아래, 앞, 뒤, 왼쪽, 오른쪽)",
         variant: "destructive",
       });
       return;
     }
 
-    const imagePromises = Array.from(files).map((file) => {
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.readAsDataURL(file);
-      });
+    toast({
+      title: "처리 중...",
+      description: "이미지를 512x512로 변환하고 있습니다",
     });
 
-    Promise.all(imagePromises).then((images) => {
-      setUploadedImages(images);
-      onImagesUploaded(images);
+    try {
+      const imagePromises = Array.from(files).map((file) => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const loadedImages = await Promise.all(imagePromises);
+      
+      // 이미지를 512x512로 리사이즈
+      const resizedImages = await Promise.all(
+        loadedImages.map(img => resizeImageTo512(img))
+      );
+      
+      setUploadedImages(resizedImages);
+      onImagesUploaded(resizedImages);
+      
       toast({
         title: "업로드 완료",
-        description: "6개의 이미지가 업로드되었습니다",
+        description: "6개의 이미지가 512x512로 변환되었습니다",
       });
+    } catch (error) {
+      toast({
+        title: "처리 실패",
+        description: "이미지 처리 중 오류가 발생했습니다",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const resizeImageTo512 = (imageDataUrl: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          reject(new Error('Canvas context not available'));
+          return;
+        }
+
+        // 이미지를 512x512로 스케일링
+        ctx.drawImage(img, 0, 0, 512, 512);
+        
+        resolve(canvas.toDataURL('image/png'));
+      };
+      
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = imageDataUrl;
     });
   };
 
@@ -67,7 +111,7 @@ export const ImageUploader = ({ onImagesUploaded }: ImageUploaderProps) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png"
+          accept="image/png,image/jpg,image/jpeg"
           multiple
           onChange={handleFileSelect}
           className="hidden"
@@ -81,7 +125,8 @@ export const ImageUploader = ({ onImagesUploaded }: ImageUploaderProps) => {
           >
             <div className="flex flex-col items-center gap-2">
               <Upload className="h-8 w-8 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">6개의 PNG 파일 선택</span>
+              <span className="text-sm text-muted-foreground">6개의 이미지 선택 (자동 512x512 변환)</span>
+              <span className="text-xs text-muted-foreground">순서: 위, 아래, 앞, 뒤, 왼쪽, 오른쪽</span>
             </div>
           </Button>
         ) : (
