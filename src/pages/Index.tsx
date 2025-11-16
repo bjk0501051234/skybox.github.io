@@ -46,10 +46,10 @@ const Index = () => {
         {/* Footer Info */}
         <div className="gradient-card p-6 rounded-xl border border-border/50 text-center space-y-2">
           <p className="text-sm text-muted-foreground">
-            생성된 스카이박스는 로블록스에서 바로 사용 가능한 형식으로 변환됩니다
+            모든 이미지는 자동으로 512x512 크기로 변환되어 로블록스에서 바로 사용 가능합니다
           </p>
           <p className="text-xs text-muted-foreground">
-            파일명: SkyboxUp, SkyboxDn, SkyboxFt, SkyboxBk, SkyboxLf, SkyboxRt
+            파일명: sky512_up.tex, sky512_dn.tex, sky512_ft.tex, sky512_bk.tex, sky512_lf.tex, sky512_rt.tex
           </p>
         </div>
       </div>
