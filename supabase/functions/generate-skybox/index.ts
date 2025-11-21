@@ -28,18 +28,18 @@ serve(async (req) => {
     console.log('Starting skybox generation with prompt:', prompt);
 
     const faces = [
-      { name: 'top', description: 'top view looking up at the sky' },
-      { name: 'bottom', description: 'bottom view looking down at the ground' },
-      { name: 'front', description: 'front view, straight ahead horizon' },
-      { name: 'back', description: 'back view, opposite horizon' },
-      { name: 'left', description: 'left side view' },
-      { name: 'right', description: 'right side view' }
+      { name: 'top', description: 'top face of 360° seamless skybox cubemap, looking straight up at the zenith sky, all edges must blend seamlessly with horizon faces' },
+      { name: 'bottom', description: 'bottom face of 360° seamless skybox cubemap, looking straight down at the ground/nadir, all edges must connect perfectly with horizon faces' },
+      { name: 'front', description: 'front face of 360° seamless skybox cubemap, forward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces' },
+      { name: 'back', description: 'back face of 360° seamless skybox cubemap, backward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces, opposite view of front' },
+      { name: 'left', description: 'left face of 360° seamless skybox cubemap, left side horizon view at eye level, edges must connect seamlessly to front and back faces' },
+      { name: 'right', description: 'right face of 360° seamless skybox cubemap, right side horizon view at eye level, edges must connect seamlessly to front and back faces' }
     ];
 
     const generatedImages: string[] = [];
 
     for (const face of faces) {
-      const facePrompt = `${prompt}, ${face.description}, seamless skybox texture, high quality, photorealistic, 1024x1024`;
+      const facePrompt = `Create a seamless 360° panoramic skybox cubemap texture: ${prompt}. This is the ${face.description}. CRITICAL: Edges must blend perfectly with adjacent cube faces to form a continuous 360° environment. Avoid any visible seams or discontinuities at edges. Ultra high quality, photorealistic, 1024x1024, seamless tileable texture for 3D environment mapping.`;
       
       console.log(`Generating ${face.name} face...`);
 
