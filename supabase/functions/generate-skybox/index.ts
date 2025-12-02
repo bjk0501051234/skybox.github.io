@@ -36,9 +36,10 @@ serve(async (req) => {
       { name: 'right', description: 'right face of 360° seamless skybox cubemap, right side horizon view at eye level, edges must connect seamlessly to front and back faces' }
     ];
 
-    const generatedImages: string[] = [];
+    console.log('Starting parallel generation of all 6 faces...');
 
-    for (const face of faces) {
+    // Generate all faces in parallel for much faster results
+    const generateFace = async (face: { name: string; description: string }) => {
       const facePrompt = `Create a seamless 360° panoramic skybox cubemap texture: ${prompt}. This is the ${face.description}. CRITICAL: Edges must blend perfectly with adjacent cube faces to form a continuous 360° environment. Avoid any visible seams or discontinuities at edges. Ultra high quality, photorealistic, 1024x1024, seamless tileable texture for 3D environment mapping.`;
       
       console.log(`Generating ${face.name} face...`);
@@ -63,16 +64,10 @@ serve(async (req) => {
 
       if (!response.ok) {
         if (response.status === 429) {
-          return new Response(
-            JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          throw new Error('RATE_LIMIT');
         }
         if (response.status === 402) {
-          return new Response(
-            JSON.stringify({ error: 'Payment required. Please add credits to your workspace.' }),
-            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          throw new Error('PAYMENT_REQUIRED');
         }
         const errorText = await response.text();
         console.error(`AI gateway error for ${face.name}:`, response.status, errorText);
@@ -87,16 +82,37 @@ serve(async (req) => {
         throw new Error(`Failed to get image URL for ${face.name}`);
       }
 
-      generatedImages.push(imageUrl);
       console.log(`Successfully generated ${face.name} face`);
+      return imageUrl;
+    };
+
+    try {
+      // Generate all 6 faces simultaneously
+      const generatedImages = await Promise.all(faces.map(face => generateFace(face)));
+      console.log('All faces generated successfully');
+
+      return new Response(
+        JSON.stringify({ images: generatedImages }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'RATE_LIMIT') {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (error.message === 'PAYMENT_REQUIRED') {
+          return new Response(
+            JSON.stringify({ error: 'Payment required. Please add credits to your workspace.' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      throw error;
     }
 
-    console.log('All faces generated successfully');
-
-    return new Response(
-      JSON.stringify({ images: generatedImages }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
 
   } catch (error) {
     console.error('Error in generate-skybox function:', error);
