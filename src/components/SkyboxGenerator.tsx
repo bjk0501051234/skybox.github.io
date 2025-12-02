@@ -46,56 +46,11 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
 
       const data = await response.json();
       
-      if (!data.crossLayoutImage) {
+      if (!data.images || data.images.length !== 6) {
         throw new Error('Invalid response from server');
       }
 
-      // Load the cross layout image
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = data.crossLayoutImage;
-      });
-
-      // Create canvas to slice the cross layout into 6 faces
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Failed to get canvas context');
-
-      // Each face is 512x512
-      canvas.width = 512;
-      canvas.height = 512;
-
-      const faces: string[] = [];
-      
-      // Cross layout positions (in the 2048x1536 image):
-      //        [top]           x:512, y:0
-      // [left][front][right][back]  y:512, x: 0,512,1024,1536
-      //        [bottom]        x:512, y:1024
-      
-      const facePositions = [
-        { name: 'top', sx: 512, sy: 0 },      // top
-        { name: 'bottom', sx: 512, sy: 1024 }, // bottom
-        { name: 'front', sx: 512, sy: 512 },   // front
-        { name: 'back', sx: 1536, sy: 512 },   // back
-        { name: 'left', sx: 0, sy: 512 },      // left
-        { name: 'right', sx: 1024, sy: 512 },  // right
-      ];
-
-      for (const pos of facePositions) {
-        ctx.clearRect(0, 0, 512, 512);
-        ctx.drawImage(
-          img,
-          pos.sx, pos.sy, 512, 512,  // source position and size
-          0, 0, 512, 512             // destination position and size
-        );
-        faces.push(canvas.toDataURL('image/png'));
-      }
-
-      onGenerated(faces);
+      onGenerated(data.images);
       toast({
         title: "생성 완료!",
         description: "스카이박스가 성공적으로 생성되었습니다",
