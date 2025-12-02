@@ -34,29 +34,31 @@ serve(async (req) => {
     //       [top]
     // [left][front][right][back]
     //       [bottom]
-    const crossPrompt = `Create a seamless 360-degree panoramic skybox in CUBEMAP CROSS LAYOUT format for: ${prompt}. 
+    const crossPrompt = `Create a seamless 360-degree panoramic skybox in CUBEMAP CROSS LAYOUT format for: ${prompt}.
 
-CRITICAL LAYOUT REQUIREMENTS:
-- Generate ONE SINGLE IMAGE in cross/cruciform layout
-- Image must be 2048x1536 pixels (aspect ratio 4:3)
-- Layout arranged as a cross shape:
-      [  TOP   ]
-[LEFT][FRONT][RIGHT][BACK]
-      [BOTTOM ]
+LAYOUT (INTERNAL, DO NOT DRAW TEXT OR BORDERS):
+- Imagine the image is arranged as a cubemap cross:
+  * One square for TOP above
+  * Four squares in a row for LEFT, FRONT, RIGHT, BACK
+  * One square for BOTTOM below
+- Each square/face is 512x512 pixels within a 2048x1536 image.
 
-Each face is 512x512 pixels within the layout.
+ABSOLUTE RULES:
+- This is ONE continuous 360° environment, NOT six separate pictures.
+- DO NOT draw any text, letters, labels, numbers, arrows, grids, borders, or UI.
+- DO NOT write words like "TOP", "BOTTOM", "FRONT", etc. The image must look like pure sky/space/landscape.
+- No duplicated suns or moons – keep lighting and main celestial bodies consistent.
+- All neighboring edges must align perfectly when folded into a cube (like paper folding).
 
-SEAMLESS INTEGRATION RULES:
-- This is ONE continuous 360° environment, NOT six separate images
-- Top face: Looking straight up at the zenith/sky
-- Bottom face: Looking straight down at the ground/nadir
-- Front/Back/Left/Right faces: Horizon views at eye level that connect seamlessly in a circle
-- All edges MUST align perfectly when folded into a cube
-- NO duplicate elements (like two moons or two suns)
-- Consistent lighting and atmosphere across all faces
-- Think of this as unfolding a paper cube - each face connects naturally
+FACE ORIENTATION GUIDANCE (CONCEPTUAL ONLY):
+- Top: Looking straight up at the sky/space.
+- Bottom: Looking straight down at ground/nadir.
+- Front/Back/Left/Right: Horizon views at eye level, smoothly wrapping 360°.
 
-STYLE: Ultra high quality, photorealistic, seamless 360° panoramic environment, perfectly tileable cubemap texture for 3D environment mapping.`;
+STYLE:
+- Ultra high quality, photorealistic, seamless 360° panoramic environment.
+- Perfectly tileable cubemap texture for 3D environment mapping.
+- Follow the prompt theme strictly (e.g., one coherent galaxy/sky style).`;
 
     try {
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
