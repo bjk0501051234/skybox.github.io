@@ -27,38 +27,23 @@ serve(async (req) => {
 
     console.log('Starting skybox generation with prompt:', prompt);
 
-    console.log('Generating single cubemap cross layout image...');
+    const faces = [
+      { name: 'top', description: 'top face of 360° seamless skybox cubemap, looking straight up at the zenith sky, all edges must blend seamlessly with horizon faces' },
+      { name: 'bottom', description: 'bottom face of 360° seamless skybox cubemap, looking straight down at the ground/nadir, all edges must connect perfectly with horizon faces' },
+      { name: 'front', description: 'front face of 360° seamless skybox cubemap, forward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces' },
+      { name: 'back', description: 'back face of 360° seamless skybox cubemap, backward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces, opposite view of front' },
+      { name: 'left', description: 'left face of 360° seamless skybox cubemap, left side horizon view at eye level, edges must connect seamlessly to front and back faces' },
+      { name: 'right', description: 'right face of 360° seamless skybox cubemap, right side horizon view at eye level, edges must connect seamlessly to front and back faces' }
+    ];
 
-    // Generate one large panoramic image in cubemap cross layout
-    // Layout:
-    //       [top]
-    // [left][front][right][back]
-    //       [bottom]
-    const crossPrompt = `Create a seamless 360-degree panoramic skybox in CUBEMAP CROSS LAYOUT format for: ${prompt}. 
+    console.log('Starting parallel generation of all 6 faces...');
 
-CRITICAL LAYOUT REQUIREMENTS:
-- Generate ONE SINGLE IMAGE in cross/cruciform layout
-- Image must be 2048x1536 pixels (aspect ratio 4:3)
-- Layout arranged as a cross shape:
-      [  TOP   ]
-[LEFT][FRONT][RIGHT][BACK]
-      [BOTTOM ]
+    // Generate all faces in parallel for much faster results
+    const generateFace = async (face: { name: string; description: string }) => {
+      const facePrompt = `Create a seamless 360° panoramic skybox cubemap texture: ${prompt}. This is the ${face.description}. CRITICAL: Edges must blend perfectly with adjacent cube faces to form a continuous 360° environment. Avoid any visible seams or discontinuities at edges. Ultra high quality, photorealistic, 1024x1024, seamless tileable texture for 3D environment mapping.`;
+      
+      console.log(`Generating ${face.name} face...`);
 
-Each face is 512x512 pixels within the layout.
-
-SEAMLESS INTEGRATION RULES:
-- This is ONE continuous 360° environment, NOT six separate images
-- Top face: Looking straight up at the zenith/sky
-- Bottom face: Looking straight down at the ground/nadir
-- Front/Back/Left/Right faces: Horizon views at eye level that connect seamlessly in a circle
-- All edges MUST align perfectly when folded into a cube
-- NO duplicate elements (like two moons or two suns)
-- Consistent lighting and atmosphere across all faces
-- Think of this as unfolding a paper cube - each face connects naturally
-
-STYLE: Ultra high quality, photorealistic, seamless 360° panoramic environment, perfectly tileable cubemap texture for 3D environment mapping.`;
-
-    try {
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -70,7 +55,7 @@ STYLE: Ultra high quality, photorealistic, seamless 360° panoramic environment,
           messages: [
             {
               role: 'user',
-              content: crossPrompt
+              content: facePrompt
             }
           ],
           modalities: ['image', 'text']
@@ -79,40 +64,52 @@ STYLE: Ultra high quality, photorealistic, seamless 360° panoramic environment,
 
       if (!response.ok) {
         if (response.status === 429) {
+          throw new Error('RATE_LIMIT');
+        }
+        if (response.status === 402) {
+          throw new Error('PAYMENT_REQUIRED');
+        }
+        const errorText = await response.text();
+        console.error(`AI gateway error for ${face.name}:`, response.status, errorText);
+        throw new Error(`Failed to generate ${face.name} image`);
+      }
+
+      const data = await response.json();
+      const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      
+      if (!imageUrl) {
+        console.error(`No image URL in response for ${face.name}:`, data);
+        throw new Error(`Failed to get image URL for ${face.name}`);
+      }
+
+      console.log(`Successfully generated ${face.name} face`);
+      return imageUrl;
+    };
+
+    try {
+      // Generate all 6 faces simultaneously
+      const generatedImages = await Promise.all(faces.map(face => generateFace(face)));
+      console.log('All faces generated successfully');
+
+      return new Response(
+        JSON.stringify({ images: generatedImages }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'RATE_LIMIT') {
           return new Response(
             JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
             { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        if (response.status === 402) {
+        if (error.message === 'PAYMENT_REQUIRED') {
           return new Response(
             JSON.stringify({ error: 'Payment required. Please add credits to your workspace.' }),
             { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
-        const errorText = await response.text();
-        console.error('AI gateway error:', response.status, errorText);
-        throw new Error('Failed to generate cubemap cross layout image');
       }
-
-      const data = await response.json();
-      const crossImageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-      
-      if (!crossImageUrl) {
-        console.error('No image URL in response:', data);
-        throw new Error('Failed to get cubemap cross layout image');
-      }
-
-      console.log('Successfully generated cubemap cross layout image');
-
-      // Return the single cross layout image - frontend will slice it into 6 faces
-
-      return new Response(
-        JSON.stringify({ crossLayoutImage: crossImageUrl }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } catch (error) {
-      console.error('Error generating cubemap:', error);
       throw error;
     }
 
