@@ -44,7 +44,17 @@ serve(async (req) => {
 
     // Generate all faces in parallel for much faster results
     const generateFace = async (face: { name: string; description: string }) => {
-      const facePrompt = `Create a seamless 360° panoramic skybox cubemap texture: ${prompt}. This is the ${face.description}. CRITICAL: Edges must blend perfectly with adjacent cube faces to form a continuous 360° environment. Avoid any visible seams or discontinuities at edges. Ultra high quality, photorealistic, 1024x1024, seamless tileable texture for 3D environment mapping.`;
+      const isHero = face.name === heroFace;
+      const facePrompt = `Generate ONE square 1024x1024 image — the ${face.description}
+
+USER ENVIRONMENT: ${prompt}
+
+ABSOLUTE RULES (must follow exactly):
+1. The image MUST FILL THE ENTIRE 1024x1024 FRAME edge-to-edge. NO white background, NO black bars, NO letterboxing, NO blank borders, NO center-only strip. Every pixel is part of the scene.
+2. NO text, NO labels, NO captions, NO watermarks, NO grid lines, NO UI elements.
+3. Unique focal subjects (moon, sun, single landmark) appear EXACTLY ONCE across the whole 360° skybox, only on the FRONT face. ${isHero ? 'THIS IS THE FRONT/HERO FACE: include the focal subject (e.g. the moon) exactly ONCE here. Do not duplicate it.' : 'THIS IS NOT the front face: DO NOT draw the focal subject. NO moon, NO sun, NO duplicate landmark on this face — only the surrounding sky/aurora/atmosphere consistent with the scene.'}
+4. Edges must blend seamlessly with adjacent cube faces so the 6 images form one continuous 360° environment.
+5. Photorealistic, high quality, fully painted from corner to corner of the square.`;
       
       console.log(`Generating ${face.name} face...`);
 
