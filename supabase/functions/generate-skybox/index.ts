@@ -20,31 +20,39 @@ interface FacePlan {
 }
 
 async function planScene(prompt: string, apiKey: string): Promise<FacePlan> {
-  const system = `You are a skybox director for a Roblox-style cubemap (6 faces: top, bottom, front, back, left, right). The 6 faces are viewed from INSIDE a cube to form a 360° environment.
+  const system = `You are an expert skybox director for a Roblox-style cubemap (6 faces: top, bottom, front, back, left, right). The 6 faces are viewed from INSIDE the cube to form a seamless 360° environment.
+
+The user's description may be in Korean and may include:
+- Explicit placement instructions ("달은 왼쪽면에", "오로라는 앞쪽에", "오른쪽에 산"). You MUST honor these literally — if the user says the moon goes on the LEFT face, hero_face = "left" and the moon appears only there.
+- Quantity constraints ("달은 하나만", "별 많이"). Respect them strictly.
+- Mood/time/weather words. Translate them into concrete visuals (colors, lighting, cloud type, star density, aurora bands, etc.).
+- Unfamiliar references (real-world places, art styles, anime, games, astronomical phenomena). Use your knowledge to render them faithfully — describe what they actually look like in detail. If a term is ambiguous, pick the most common interpretation and commit to it across all 6 faces.
 
 Your job:
-1. Read the user's environment description carefully (it may be in Korean).
-2. Identify any UNIQUE focal subjects that should appear ONLY ONCE in the whole scene (moon, sun, single planet, single landmark). List them in unique_subjects.
-3. Pick which face holds the main focal subject (usually 'front').
-4. Write a detailed, concrete visual description for EACH of the 6 faces, in English, so an image model can generate them. Each face description must:
-   - Describe what is visible in that direction (sky, horizon, atmosphere, color gradients, cloud shapes, aurora bands, stars, etc.).
-   - Reference neighboring faces so edges blend (e.g. "the aurora ribbon continues from the right edge of the FRONT face").
-   - Specify which side of the focal subject this face shows (e.g. "the moon sits in the upper-right of the FRONT face, so the LEFT face shows the open sky on the moon's left side").
-   - For TOP: pure sky/zenith only — no horizon, no ground.
-   - For BOTTOM: simple ground/dark surface — no horizon line.
-   - NON-hero side faces (front/back/left/right that are not the hero) MUST NOT contain the focal subject (no second moon).
-5. Write a short global_style string describing palette, mood, lighting, time of day, art style, atmosphere consistency.
+1. Parse the user's description carefully. Extract:
+   - explicit face assignments (which subject goes on which face)
+   - unique subjects that must appear only once (moon, sun, single landmark, single planet)
+   - global mood/palette/time-of-day/weather/art-style
+2. Decide hero_face: the face that holds the main unique subject. If the user explicitly named a face (left/right/front/back), use that exact face. Otherwise default to "front".
+3. Write a detailed, concrete English visual description for EACH of the 6 faces. Each must:
+   - Describe exactly what is visible in that direction (sky gradient with hex-like color words, horizon, cloud shapes, aurora ribbons and their direction, star fields, atmospheric haze, ground texture, etc.).
+   - Reference neighboring faces so edges blend (e.g. "the violet aurora ribbon enters from the right edge and continues into the FRONT face").
+   - State which side of the hero subject this face shows ("the moon sits in the upper area of the LEFT face, so the FRONT face shows the open sky on the moon's right side, with faint moon-glow bleeding in from the left edge").
+   - TOP face: pure sky/zenith only — no horizon, no ground, no mountains. Still continues the aurora/star pattern from the side faces.
+   - BOTTOM face: simple uniform ground or dark surface matching the scene. No horizon line, no subject.
+   - Side faces (front/back/left/right) that are NOT the hero face MUST NOT contain the unique subject (no second moon, no second sun).
+4. Write a short global_style string: palette, lighting, time of day, weather, art style, atmospheric consistency rules.
 
-Return ONLY valid JSON matching the tool schema.`;
+Return ONLY valid JSON via the tool.`;
 
   const resp = await fetch(AI_URL, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: 'google/gemini-2.5-pro',
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: `User environment description:\n"""\n${prompt}\n"""\n\nPlan the 6 skybox faces now.` },
+        { role: 'user', content: `User environment description:\n"""\n${prompt}\n"""\n\nIf any term is unfamiliar (a place, art style, game, anime, astronomical phenomenon, etc.), use your training knowledge to recall what it actually looks like and describe it concretely. Plan all 6 skybox faces now.` },
       ],
       tools: [{
         type: 'function',
