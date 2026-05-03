@@ -27,20 +27,34 @@ serve(async (req) => {
 
     console.log('Starting skybox generation with prompt:', prompt);
 
+    // Decide which single face holds the unique focal subject (e.g. moon/sun).
+    // We pick 'front' as the hero face. All other faces MUST NOT contain the focal subject.
+    const heroFace = 'front';
+
     const faces = [
-      { name: 'top', description: 'top face of 360° seamless skybox cubemap, looking straight up at the zenith sky, all edges must blend seamlessly with horizon faces' },
-      { name: 'bottom', description: 'bottom face of 360° seamless skybox cubemap, looking straight down at the ground/nadir, all edges must connect perfectly with horizon faces' },
-      { name: 'front', description: 'front face of 360° seamless skybox cubemap, forward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces' },
-      { name: 'back', description: 'back face of 360° seamless skybox cubemap, backward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces, opposite view of front' },
-      { name: 'left', description: 'left face of 360° seamless skybox cubemap, left side horizon view at eye level, edges must connect seamlessly to front and back faces' },
-      { name: 'right', description: 'right face of 360° seamless skybox cubemap, right side horizon view at eye level, edges must connect seamlessly to front and back faces' }
+      { name: 'top',    description: 'TOP face (zenith) of a seamless 360° skybox cubemap — looking straight up. Pure sky only. NO horizon, NO ground, NO mountains. Must blend seamlessly with all 4 side faces at every edge.' },
+      { name: 'bottom', description: 'BOTTOM face (nadir) of a seamless 360° skybox cubemap — looking straight down. Simple uniform ground/dark color. NO horizon line, NO subject. Must blend seamlessly with all 4 side faces at every edge.' },
+      { name: 'front',  description: 'FRONT face (hero view) of a seamless 360° skybox cubemap — eye-level horizon view. THIS is the only face that contains the main focal subject. Left and right edges must continue seamlessly into LEFT and RIGHT faces.' },
+      { name: 'back',   description: 'BACK face of a seamless 360° skybox cubemap — eye-level horizon view, opposite of front. Background atmosphere only, NO focal subject (no moon, no sun, no unique landmark). Left/right edges blend into RIGHT and LEFT faces.' },
+      { name: 'left',   description: 'LEFT face of a seamless 360° skybox cubemap — eye-level horizon view, 90° left of front. Background atmosphere only, NO focal subject. Right edge connects to FRONT, left edge connects to BACK.' },
+      { name: 'right',  description: 'RIGHT face of a seamless 360° skybox cubemap — eye-level horizon view, 90° right of front. Background atmosphere only, NO focal subject. Left edge connects to FRONT, right edge connects to BACK.' }
     ];
 
     console.log('Starting parallel generation of all 6 faces...');
 
     // Generate all faces in parallel for much faster results
     const generateFace = async (face: { name: string; description: string }) => {
-      const facePrompt = `Create a seamless 360° panoramic skybox cubemap texture: ${prompt}. This is the ${face.description}. CRITICAL: Edges must blend perfectly with adjacent cube faces to form a continuous 360° environment. Avoid any visible seams or discontinuities at edges. Ultra high quality, photorealistic, 1024x1024, seamless tileable texture for 3D environment mapping.`;
+      const isHero = face.name === heroFace;
+      const facePrompt = `Generate ONE square 1024x1024 image — the ${face.description}
+
+USER ENVIRONMENT: ${prompt}
+
+ABSOLUTE RULES (must follow exactly):
+1. The image MUST FILL THE ENTIRE 1024x1024 FRAME edge-to-edge. NO white background, NO black bars, NO letterboxing, NO blank borders, NO center-only strip. Every pixel is part of the scene.
+2. NO text, NO labels, NO captions, NO watermarks, NO grid lines, NO UI elements.
+3. Unique focal subjects (moon, sun, single landmark) appear EXACTLY ONCE across the whole 360° skybox, only on the FRONT face. ${isHero ? 'THIS IS THE FRONT/HERO FACE: include the focal subject (e.g. the moon) exactly ONCE here. Do not duplicate it.' : 'THIS IS NOT the front face: DO NOT draw the focal subject. NO moon, NO sun, NO duplicate landmark on this face — only the surrounding sky/aurora/atmosphere consistent with the scene.'}
+4. Edges must blend seamlessly with adjacent cube faces so the 6 images form one continuous 360° environment.
+5. Photorealistic, high quality, fully painted from corner to corner of the square.`;
       
       console.log(`Generating ${face.name} face...`);
 
