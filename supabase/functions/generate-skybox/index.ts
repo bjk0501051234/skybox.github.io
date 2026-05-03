@@ -27,13 +27,17 @@ serve(async (req) => {
 
     console.log('Starting skybox generation with prompt:', prompt);
 
+    // Decide which single face holds the unique focal subject (e.g. moon/sun).
+    // We pick 'front' as the hero face. All other faces MUST NOT contain the focal subject.
+    const heroFace = 'front';
+
     const faces = [
-      { name: 'top', description: 'top face of 360° seamless skybox cubemap, looking straight up at the zenith sky, all edges must blend seamlessly with horizon faces' },
-      { name: 'bottom', description: 'bottom face of 360° seamless skybox cubemap, looking straight down at the ground/nadir, all edges must connect perfectly with horizon faces' },
-      { name: 'front', description: 'front face of 360° seamless skybox cubemap, forward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces' },
-      { name: 'back', description: 'back face of 360° seamless skybox cubemap, backward horizon view at eye level, left and right edges must continue seamlessly to adjacent faces, opposite view of front' },
-      { name: 'left', description: 'left face of 360° seamless skybox cubemap, left side horizon view at eye level, edges must connect seamlessly to front and back faces' },
-      { name: 'right', description: 'right face of 360° seamless skybox cubemap, right side horizon view at eye level, edges must connect seamlessly to front and back faces' }
+      { name: 'top',    description: 'TOP face (zenith) of a seamless 360° skybox cubemap — looking straight up. Pure sky only. NO horizon, NO ground, NO mountains. Must blend seamlessly with all 4 side faces at every edge.' },
+      { name: 'bottom', description: 'BOTTOM face (nadir) of a seamless 360° skybox cubemap — looking straight down. Simple uniform ground/dark color. NO horizon line, NO subject. Must blend seamlessly with all 4 side faces at every edge.' },
+      { name: 'front',  description: 'FRONT face (hero view) of a seamless 360° skybox cubemap — eye-level horizon view. THIS is the only face that contains the main focal subject. Left and right edges must continue seamlessly into LEFT and RIGHT faces.' },
+      { name: 'back',   description: 'BACK face of a seamless 360° skybox cubemap — eye-level horizon view, opposite of front. Background atmosphere only, NO focal subject (no moon, no sun, no unique landmark). Left/right edges blend into RIGHT and LEFT faces.' },
+      { name: 'left',   description: 'LEFT face of a seamless 360° skybox cubemap — eye-level horizon view, 90° left of front. Background atmosphere only, NO focal subject. Right edge connects to FRONT, left edge connects to BACK.' },
+      { name: 'right',  description: 'RIGHT face of a seamless 360° skybox cubemap — eye-level horizon view, 90° right of front. Background atmosphere only, NO focal subject. Left edge connects to FRONT, right edge connects to BACK.' }
     ];
 
     console.log('Starting parallel generation of all 6 faces...');
