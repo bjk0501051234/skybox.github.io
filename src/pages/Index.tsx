@@ -1,17 +1,33 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { SkyboxGenerator } from "@/components/SkyboxGenerator";
 import { DragDropUploader } from "@/components/DragDropUploader";
 import { CubePreview3D } from "@/components/CubePreview3D";
 import { SkyboxPreview } from "@/components/SkyboxPreview";
 import { Separator } from "@/components/ui/separator";
-import { Box, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Box, Info, Key, LogIn, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const [skyboxImages, setSkyboxImages] = useState<string[]>([]);
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen py-12 px-4">
       <div className="max-w-7xl mx-auto space-y-12">
+        {/* Top bar */}
+        <div className="flex justify-end gap-2">
+          {user ? (
+            <>
+              <Link to="/settings"><Button variant="outline" size="sm"><Key className="h-4 w-4 mr-1" /> AI 키 설정</Button></Link>
+              <Button variant="ghost" size="sm" onClick={() => signOut()}><LogOut className="h-4 w-4 mr-1" /> 로그아웃</Button>
+            </>
+          ) : (
+            <Link to="/auth"><Button variant="outline" size="sm"><LogIn className="h-4 w-4 mr-1" /> 로그인</Button></Link>
+          )}
+        </div>
+
         {/* Header */}
         <div className="text-center space-y-4 animate-float">
           <div className="flex items-center justify-center gap-3">
