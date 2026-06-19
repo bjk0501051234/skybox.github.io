@@ -295,7 +295,15 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const action = body.action ?? 'plan-and-panorama';
-    const providers = await loadProviders(req);
+    const selected = (body.provider ?? 'auto') as 'auto' | Provider;
+    let providers = await loadProviders(req);
+    if (selected !== 'auto') {
+      providers = providers.filter((p) => p.provider === selected);
+      if (providers.length === 0) {
+        return new Response(JSON.stringify({ error: `선택한 제공자(${selected})의 키가 없습니다. /settings에서 등록하세요.` }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
     if (providers.length === 0) {
       return new Response(JSON.stringify({ error: 'AI 키가 설정되지 않았습니다. /settings에서 키를 등록하세요.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
