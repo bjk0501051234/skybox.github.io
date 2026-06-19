@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,13 +20,42 @@ interface SkyboxGeneratorProps {
 
 interface Sticker { face: FaceName; description: string; }
 
+type Provider = "lovable" | "gemini" | "huggingface";
+type Selection = "auto" | Provider;
+
+const PROVIDER_LABEL: Record<Provider, string> = {
+  lovable: "Lovable AI (Gemini 2.5)",
+  gemini: "Google Gemini (내 키)",
+  huggingface: "HuggingFace (내 키)",
+};
+
 export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<string>("");
+  const [available, setAvailable] = useState<Provider[]>(["lovable"]);
+  const [selected, setSelected] = useState<Selection>("auto");
   const { toast } = useToast();
 
-  const callEdge = async (body: unknown) => {
+  // Load which providers this user has keys for. Lovable is always available (managed key).
+  useEffect(() => {
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setAvailable(["lovable"]);
+        return;
+      }
+      const { data } = await supabase
+        .from("user_api_keys")
+        .select("provider")
+        .eq("user_id", session.user.id);
+      const set = new Set<Provider>(["lovable"]);
+      for (const r of data ?? []) set.add(r.provider as Provider);
+      setAvailable([...set]);
+    })();
+  }, []);
+
+  const callEdge = async (body: Record<string, unknown>) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     const resp = await fetch(
@@ -31,7 +67,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
           "Authorization": `Bearer ${token}`,
           "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, provider: selected }),
       },
     );
     if (!resp.ok) {
@@ -48,20 +84,16 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     }
     setIsGenerating(true);
     try {
-      // 1) Plan + pure-sky panorama
       setStatus("순수 하늘 파노라마 생성 중...");
       const { panorama, stickers } = await callEdge({ action: "plan-and-panorama", prompt }) as {
         panorama: string;
         stickers: Sticker[];
       };
 
-      // 2) Project panorama into 6 seamless cube faces on the client
       setStatus("파노라마를 6면 큐브맵으로 투영 중...");
       const faces = await panoramaToCubemap(panorama, 1024);
 
-      // 3) For each sticker, ask AI to integrate the object naturally on top of that face
       if (stickers && stickers.length > 0) {
-        // Group multiple stickers on the same face into one edit call (more natural).
         const byFace = new Map<FaceName, string[]>();
         for (const s of stickers) {
           if (!byFace.has(s.face)) byFace.set(s.face, []);
@@ -85,7 +117,6 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
         }
       }
 
-      // 4) Hand off in canonical order: [top, bottom, front, back, left, right]
       onGenerated(FACE_ORDER.map((f) => faces[f]));
       toast({ title: "생성 완료!", description: "스카이박스가 자연스럽게 연결되었습니다" });
     } catch (error) {
@@ -118,6 +149,24 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
         </div>
 
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm">AI 제공자 선택</Label>
+            <Select value={selected} onValueChange={(v) => setSelected(v as Selection)} disabled={isGenerating}>
+              <SelectTrigger className="h-11 bg-background/50 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
+                {available.map((p) => (
+                  <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              특정 AI만 강제로 쓰려면 선택하세요. /settings에 키를 추가하면 더 많은 옵션이 나타납니다.
+            </p>
+          </div>
+
           <Input
             id="prompt"
             placeholder="보라 오로라 하늘, 왼쪽에 큰 달 하나..."
