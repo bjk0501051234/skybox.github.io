@@ -8,57 +8,61 @@ const corsHeaders = {
 
 const LOVABLE_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const HF_FLUX = 'https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell';
 
 type Provider = 'lovable' | 'gemini' | 'huggingface';
 interface ProviderKey { provider: Provider; api_key: string; priority: number; }
 
-interface FacePlan {
-  top: string; bottom: string; front: string; back: string; left: string; right: string;
-  global_style: string; unique_subjects: string[];
-  hero_face: 'front' | 'back' | 'left' | 'right';
+type FaceName = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right';
+interface Sticker { face: FaceName; description: string; }
+interface SkyPlan {
+  panorama_prompt: string;
+  stickers: Sticker[];
 }
 
-const PLAN_SYSTEM = `You are an expert skybox director for a Roblox-style cubemap (6 faces: top, bottom, front, back, left, right) viewed from INSIDE the cube. The user description may be Korean and may include explicit placement (e.g. "달은 왼쪽면에"), quantity constraints ("달은 하나만"), mood/time/weather words, and unfamiliar references (places, art styles, anime, games, astronomical phenomena) — use your training knowledge to recall what they actually look like and render them faithfully.
+// =========== PLANNING ===========
+// Split user's request into:
+//   1. pure sky panorama prompt (NO objects, NO clouds, NO moon, NO stars — just sky colors / aurora / gradient / atmosphere)
+//   2. list of objects to "sticker" onto specific faces afterwards (moon, clouds, stars, planets, etc.)
 
-Rules:
-- Honor explicit face assignments. If user says moon goes LEFT, hero_face = "left".
-- hero_face defaults to "front" if unspecified.
-- Each face description must be concrete English: sky gradient with color words, horizon, cloud shapes, aurora ribbons (with direction), star fields, atmospheric haze, ground texture. Reference neighboring faces so edges blend seamlessly.
-- TOP: pure sky/zenith only, no horizon/ground/mountains, still continues aurora/star pattern.
-- BOTTOM: simple uniform ground/dark surface, no horizon line, no subject.
-- Side faces that are NOT the hero face MUST NOT contain unique subjects (no second moon/sun).
-- Hero face holds each unique subject EXACTLY ONCE.
-Return ONLY valid JSON via the tool.`;
+const PLAN_SYSTEM = `You are a skybox director. The user describes a sky they want for a Roblox-style cubemap (viewed from inside).
+Your job is to SPLIT the request into:
+  A) panorama_prompt: a description of the PURE SKY only — colors, gradient, aurora ribbons, atmospheric haze, time-of-day mood. NO discrete objects. NO clouds. NO moon. NO sun. NO stars. NO planets. NO mountains. Direction-agnostic — must look natural when wrapped 360° around the viewer. This is the background that will be projected seamlessly across all 6 faces.
+  B) stickers: an array of discrete objects the user wants, each assigned to ONE face. Respect explicit user placements ("달은 왼쪽" -> face:"left"). If a face isn't specified, pick the most natural one ("front" by default; "top" for sun/moon if user implies overhead; "bottom" never). NEVER place the same singular subject (moon, sun) on more than one face. If user says "달 하나만", produce exactly one moon sticker.
 
-function buildFacePrompt(face: keyof FacePlan, plan: FacePlan): string {
-  const isHero = face === plan.hero_face;
-  const isSide = face === 'front' || face === 'back' || face === 'left' || face === 'right';
-  const subjectLine = plan.unique_subjects.length === 0
-    ? 'No unique focal subjects.'
-    : isHero
-      ? `This face IS the hero. Include each unique subject EXACTLY ONCE here, nowhere else: ${plan.unique_subjects.join(', ')}.`
-      : isSide
-        ? `DO NOT draw any unique subjects on this face: ${plan.unique_subjects.join(', ')}. Only surrounding sky/atmosphere.`
-        : `Do not draw any unique subjects: ${plan.unique_subjects.join(', ')}.`;
-  return `Generate ONE square 1024x1024 image — face "${(face as string).toUpperCase()}" of a seamless 360° skybox cubemap (Roblox-style), viewed from inside a cube.
+The user input may be Korean. Use your world knowledge for unfamiliar references (anime, places, astronomical phenomena) — describe what they actually look like.
 
-GLOBAL STYLE (consistent across all 6 faces): ${plan.global_style}
+Return ONLY JSON via the tool.`;
 
-THIS FACE'S CONTENT: ${plan[face as keyof FacePlan]}
-
-UNIQUE-SUBJECT RULE: ${subjectLine}
-
-HARD RULES:
-- MUST FILL ENTIRE 1024x1024 FRAME corner-to-corner. NO white background, NO black bars, NO letterboxing, NO blank borders, NO center strip, NO frame, NO margins.
-- NO text, labels, captions, watermarks, grid lines, arrows, UI.
-- Edges must blend seamlessly with adjacent faces for continuous 360° environment.
-${face === 'top' ? '- TOP: pure sky/zenith only. No horizon, ground, or mountains.\n' : ''}${face === 'bottom' ? '- BOTTOM: simple uniform ground/dark surface, no horizon line or subject.\n' : ''}- Photorealistic, ultra-high quality, cinematic lighting, sharp detail, fully painted corner to corner.`;
+function planTool() {
+  return {
+    type: 'function',
+    function: {
+      name: 'plan_sky',
+      parameters: {
+        type: 'object',
+        properties: {
+          panorama_prompt: { type: 'string', description: 'Pure sky panorama description (no objects).' },
+          stickers: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                face: { type: 'string', enum: ['top', 'bottom', 'front', 'back', 'left', 'right'] },
+                description: { type: 'string', description: 'What to add to this face. e.g. "a single large full moon with realistic crater detail, soft glow blending into the surrounding sky"' },
+              },
+              required: ['face', 'description'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['panorama_prompt', 'stickers'],
+        additionalProperties: false,
+      },
+    },
+  };
 }
 
-// ============ PROVIDERS ============
-
-async function planWithLovable(prompt: string, key: string): Promise<FacePlan> {
+async function planWithLovable(prompt: string, key: string): Promise<SkyPlan> {
   const resp = await fetch(LOVABLE_URL, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -66,34 +70,15 @@ async function planWithLovable(prompt: string, key: string): Promise<FacePlan> {
       model: 'google/gemini-2.5-pro',
       messages: [
         { role: 'system', content: PLAN_SYSTEM },
-        { role: 'user', content: `User description:\n"""\n${prompt}\n"""\nPlan all 6 faces now.` },
+        { role: 'user', content: `User description:\n"""\n${prompt}\n"""\nPlan now.` },
       ],
-      tools: [{
-        type: 'function',
-        function: {
-          name: 'plan_skybox',
-          parameters: {
-            type: 'object',
-            properties: {
-              global_style: { type: 'string' },
-              unique_subjects: { type: 'array', items: { type: 'string' } },
-              hero_face: { type: 'string', enum: ['front', 'back', 'left', 'right'] },
-              top: { type: 'string' }, bottom: { type: 'string' },
-              front: { type: 'string' }, back: { type: 'string' },
-              left: { type: 'string' }, right: { type: 'string' },
-            },
-            required: ['global_style', 'unique_subjects', 'hero_face', 'top', 'bottom', 'front', 'back', 'left', 'right'],
-            additionalProperties: false,
-          },
-        },
-      }],
-      tool_choice: { type: 'function', function: { name: 'plan_skybox' } },
+      tools: [planTool()],
+      tool_choice: { type: 'function', function: { name: 'plan_sky' } },
     }),
   });
   if (!resp.ok) {
-    const t = await resp.text();
     if (resp.status === 429 || resp.status === 402) throw new Error('QUOTA');
-    throw new Error(`Lovable plan: ${resp.status} ${t.slice(0, 200)}`);
+    throw new Error(`Lovable plan: ${resp.status} ${(await resp.text()).slice(0,200)}`);
   }
   const data = await resp.json();
   const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
@@ -101,21 +86,20 @@ async function planWithLovable(prompt: string, key: string): Promise<FacePlan> {
   return JSON.parse(args);
 }
 
-async function planWithGemini(prompt: string, key: string): Promise<FacePlan> {
+async function planWithGemini(prompt: string, key: string): Promise<SkyPlan> {
   const url = `${GEMINI_BASE}/gemini-2.0-flash:generateContent?key=${key}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: PLAN_SYSTEM + '\nReturn JSON matching: {global_style, unique_subjects[], hero_face, top, bottom, front, back, left, right}' }] },
-      contents: [{ role: 'user', parts: [{ text: `User description:\n"""\n${prompt}\n"""\nPlan all 6 faces now. Return JSON only.` }] }],
+      systemInstruction: { parts: [{ text: PLAN_SYSTEM + '\nReturn JSON: {panorama_prompt:string, stickers:[{face,description}]}' }] },
+      contents: [{ role: 'user', parts: [{ text: `User description:\n"""\n${prompt}\n"""\nReturn JSON only.` }] }],
       generationConfig: { responseMimeType: 'application/json' },
     }),
   });
   if (!resp.ok) {
-    const t = await resp.text();
     if (resp.status === 429 || resp.status === 403) throw new Error('QUOTA');
-    throw new Error(`Gemini plan: ${resp.status} ${t.slice(0, 200)}`);
+    throw new Error(`Gemini plan: ${resp.status} ${(await resp.text()).slice(0,200)}`);
   }
   const data = await resp.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -123,71 +107,134 @@ async function planWithGemini(prompt: string, key: string): Promise<FacePlan> {
   return JSON.parse(text);
 }
 
-// Image generation
-async function imageWithLovable(facePrompt: string, key: string): Promise<string> {
+// =========== PANORAMA (pure sky, no objects) ===========
+
+function buildPanoramaPrompt(p: string): string {
+  return `Generate ONE seamless 360° equirectangular panoramic sky texture (2:1 aspect, very wide horizontal). Pure sky atmosphere ONLY.
+
+SKY: ${p}
+
+HARD RULES:
+- ABSOLUTELY NO discrete objects: no moon, no sun, no stars, no planets, no clouds with hard shapes, no mountains, no horizon line, no buildings, no creatures.
+- Only sky color, gradient, atmospheric glow, soft aurora ribbons, color bands, haze.
+- Must tile/wrap seamlessly left↔right (equirectangular convention).
+- No text, no watermark, no borders, no letterboxing. Fill the entire frame.
+- Smooth, dreamy, painterly-realistic. Will be projected onto a sphere/cube so direction-agnostic.`;
+}
+
+async function panoramaWithLovable(prompt: string, key: string): Promise<string> {
   const resp = await fetch(LOVABLE_URL, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image',
-      messages: [{ role: 'user', content: facePrompt }],
+      messages: [{ role: 'user', content: buildPanoramaPrompt(prompt) }],
       modalities: ['image', 'text'],
     }),
   });
   if (!resp.ok) {
     if (resp.status === 429 || resp.status === 402) throw new Error('QUOTA');
-    throw new Error(`Lovable img: ${resp.status}`);
+    throw new Error(`Lovable pano: ${resp.status}`);
   }
   const data = await resp.json();
   const url = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-  if (!url) throw new Error('Lovable img: no url');
+  if (!url) throw new Error('Lovable pano: no url');
   return url;
 }
 
-async function imageWithGemini(facePrompt: string, key: string): Promise<string> {
+async function panoramaWithGemini(prompt: string, key: string): Promise<string> {
   const url = `${GEMINI_BASE}/gemini-2.0-flash-exp-image-generation:generateContent?key=${key}`;
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: facePrompt }] }],
+      contents: [{ role: 'user', parts: [{ text: buildPanoramaPrompt(prompt) }] }],
       generationConfig: { responseModalities: ['Image', 'Text'] },
     }),
   });
   if (!resp.ok) {
     if (resp.status === 429 || resp.status === 403) throw new Error('QUOTA');
-    throw new Error(`Gemini img: ${resp.status}`);
+    throw new Error(`Gemini pano: ${resp.status}`);
   }
   const data = await resp.json();
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  for (const p of parts) {
-    if (p.inlineData?.data) {
-      return `data:${p.inlineData.mimeType || 'image/png'};base64,${p.inlineData.data}`;
-    }
+  for (const p of data.candidates?.[0]?.content?.parts ?? []) {
+    if (p.inlineData?.data) return `data:${p.inlineData.mimeType || 'image/png'};base64,${p.inlineData.data}`;
   }
-  throw new Error('Gemini img: no inlineData');
+  throw new Error('Gemini pano: no image');
 }
 
-async function imageWithHuggingFace(facePrompt: string, key: string): Promise<string> {
-  const resp = await fetch(HF_FLUX, {
+// =========== STICKER (edit single face image, add one object naturally) ===========
+
+function buildStickerPrompt(desc: string, face: FaceName): string {
+  return `You are given a square sky image (one face of a 360° skybox cubemap, face = ${face.toUpperCase()}, viewed from inside the cube).
+
+TASK: Add the following onto this sky, fully integrated and natural:
+${desc}
+
+STRICT RULES:
+- KEEP the existing sky background EXACTLY as is. Do not change its color, gradient, or atmosphere.
+- The new object must look like it BELONGS in the sky — soft edges, realistic atmospheric glow, light scattering, and CAST appropriate light/shadow/haze on the surrounding sky around it. Not a flat sticker.
+- Do not add anything not asked for. No text, watermarks, borders, frames, letterboxing.
+- Return the modified full-frame image, same square dimensions, filled corner to corner.`;
+}
+
+async function stickerWithLovable(desc: string, face: FaceName, faceImage: string, key: string): Promise<string> {
+  const resp = await fetch(LOVABLE_URL, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'Accept': 'image/png' },
+    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      inputs: facePrompt,
-      parameters: { width: 1024, height: 1024, num_inference_steps: 4 },
+      model: 'google/gemini-2.5-flash-image',
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: buildStickerPrompt(desc, face) },
+          { type: 'image_url', image_url: { url: faceImage } },
+        ],
+      }],
+      modalities: ['image', 'text'],
     }),
   });
   if (!resp.ok) {
-    if (resp.status === 429 || resp.status === 503) throw new Error('QUOTA');
-    const t = await resp.text();
-    throw new Error(`HF img: ${resp.status} ${t.slice(0, 150)}`);
+    if (resp.status === 429 || resp.status === 402) throw new Error('QUOTA');
+    throw new Error(`Lovable sticker: ${resp.status}`);
   }
-  const buf = await resp.arrayBuffer();
-  const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-  return `data:image/png;base64,${b64}`;
+  const data = await resp.json();
+  const url = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+  if (!url) throw new Error('Lovable sticker: no url');
+  return url;
 }
 
-// ============ ORCHESTRATION ============
+async function stickerWithGemini(desc: string, face: FaceName, faceImage: string, key: string): Promise<string> {
+  // faceImage is data:image/png;base64,XXXX — strip prefix
+  const m = faceImage.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+  if (!m) throw new Error('Gemini sticker: bad image input');
+  const url = `${GEMINI_BASE}/gemini-2.0-flash-exp-image-generation:generateContent?key=${key}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: buildStickerPrompt(desc, face) },
+          { inlineData: { mimeType: m[1], data: m[2] } },
+        ],
+      }],
+      generationConfig: { responseModalities: ['Image', 'Text'] },
+    }),
+  });
+  if (!resp.ok) {
+    if (resp.status === 429 || resp.status === 403) throw new Error('QUOTA');
+    throw new Error(`Gemini sticker: ${resp.status}`);
+  }
+  const data = await resp.json();
+  for (const p of data.candidates?.[0]?.content?.parts ?? []) {
+    if (p.inlineData?.data) return `data:${p.inlineData.mimeType || 'image/png'};base64,${p.inlineData.data}`;
+  }
+  throw new Error('Gemini sticker: no image');
+}
+
+// =========== PROVIDER FALLBACK ===========
 
 async function tryProviders<T>(
   providers: ProviderKey[],
@@ -204,85 +251,87 @@ async function tryProviders<T>(
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`[${label}] ${p.provider} failed: ${msg}`);
-      errors.push(`${p.provider}: ${msg}`);
-      // continue to next provider on any error (especially QUOTA)
+      errors.push(`${p.provider}:${msg}`);
     }
   }
   throw new Error(`All providers failed for ${label}. ${errors.join(' | ')}`);
 }
 
+async function loadProviders(req: Request): Promise<ProviderKey[]> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+  const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  let userKeys: ProviderKey[] = [];
+  const authHeader = req.headers.get('Authorization');
+  if (authHeader) {
+    const token = authHeader.replace('Bearer ', '');
+    const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (user) {
+      const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
+      const { data } = await admin.from('user_api_keys')
+        .select('provider, api_key, priority')
+        .eq('user_id', user.id)
+        .order('priority', { ascending: true });
+      userKeys = (data ?? []) as ProviderKey[];
+    }
+  }
+  const hasLovable = userKeys.some(k => k.provider === 'lovable');
+  const providers = [...userKeys];
+  if (!hasLovable && LOVABLE_API_KEY) {
+    providers.push({ provider: 'lovable', api_key: LOVABLE_API_KEY, priority: 999 });
+  }
+  providers.sort((a, b) => a.priority - b.priority);
+  return providers;
+}
+
+// =========== HANDLER ===========
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt } = await req.json();
-    if (!prompt) {
-      return new Response(JSON.stringify({ error: 'Prompt is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-    // Load user's saved keys (if authenticated)
-    let userKeys: ProviderKey[] = [];
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (user) {
-        const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
-        const { data } = await admin.from('user_api_keys')
-          .select('provider, api_key, priority')
-          .eq('user_id', user.id)
-          .order('priority', { ascending: true });
-        userKeys = (data ?? []) as ProviderKey[];
-        console.log(`User ${user.id} keys:`, userKeys.map(k => k.provider));
-      }
-    }
-
-    // Build effective provider list. If user provided no lovable override and workspace has key, append it last as default.
-    const hasLovable = userKeys.some(k => k.provider === 'lovable');
-    let providers = [...userKeys];
-    if (!hasLovable && LOVABLE_API_KEY) {
-      providers.push({ provider: 'lovable', api_key: LOVABLE_API_KEY, priority: 999 });
-    }
-    providers.sort((a, b) => a.priority - b.priority);
-
+    const body = await req.json();
+    const action = body.action ?? 'plan-and-panorama';
+    const providers = await loadProviders(req);
     if (providers.length === 0) {
       return new Response(JSON.stringify({ error: 'AI 키가 설정되지 않았습니다. /settings에서 키를 등록하세요.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log('Effective provider order:', providers.map(p => p.provider));
+    if (action === 'plan-and-panorama') {
+      const { prompt } = body;
+      if (!prompt) throw new Error('prompt required');
+      const plan = await tryProviders(providers, {
+        lovable: (k) => planWithLovable(prompt, k),
+        gemini: (k) => planWithGemini(prompt, k),
+      }, 'plan');
+      console.log('Plan:', JSON.stringify(plan));
+      const panorama = await tryProviders(providers, {
+        lovable: (k) => panoramaWithLovable(plan.panorama_prompt, k),
+        gemini: (k) => panoramaWithGemini(plan.panorama_prompt, k),
+      }, 'panorama');
+      return new Response(JSON.stringify({ panorama, stickers: plan.stickers }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    // STEP 1: Plan (lovable or gemini; HF can't plan)
-    const plan = await tryProviders(providers, {
-      lovable: (k) => planWithLovable(prompt, k),
-      gemini: (k) => planWithGemini(prompt, k),
-    }, 'plan');
-    console.log('Plan ready. hero=', plan.hero_face, 'subjects=', plan.unique_subjects);
+    if (action === 'sticker') {
+      const { faceImage, face, description } = body;
+      if (!faceImage || !face || !description) throw new Error('faceImage, face, description required');
+      const image = await tryProviders(providers, {
+        lovable: (k) => stickerWithLovable(description, face, faceImage, k),
+        gemini: (k) => stickerWithGemini(description, face, faceImage, k),
+      }, `sticker-${face}`);
+      return new Response(JSON.stringify({ image }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    // STEP 2: Generate each face with provider fallback
-    const faces: Array<keyof FacePlan> = ['top', 'bottom', 'front', 'back', 'left', 'right'];
-    const images = await Promise.all(faces.map(async (face) => {
-      const fp = buildFacePrompt(face, plan);
-      return tryProviders(providers, {
-        lovable: (k) => imageWithLovable(fp, k),
-        gemini: (k) => imageWithGemini(fp, k),
-        huggingface: (k) => imageWithHuggingFace(fp, k),
-      }, `img-${face}`);
-    }));
-
-    return new Response(JSON.stringify({ images }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    throw new Error(`Unknown action: ${action}`);
   } catch (error) {
     console.error('generate-skybox error:', error);
-    const msg = error instanceof Error ? error.message : 'Failed to generate skybox';
+    const msg = error instanceof Error ? error.message : 'Failed';
     return new Response(JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
