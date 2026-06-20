@@ -166,6 +166,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="local">무료 로컬 생성 (API/한도 없음)</SelectItem>
                 <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
                 {available.map((p) => (
                   <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
@@ -173,7 +174,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              특정 AI만 강제로 쓰려면 선택하세요. /settings에 키를 추가하면 더 많은 옵션이 나타납니다.
+              무료 로컬은 브라우저 Canvas로 생성해서 계정 제한·결제·API 키와 무관하게 작동합니다.
             </p>
           </div>
 
