@@ -12,7 +12,7 @@ import {
 import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
+import { createLocalSkyPanorama, panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
@@ -21,7 +21,7 @@ interface SkyboxGeneratorProps {
 interface Sticker { face: FaceName; description: string; }
 
 type Provider = "lovable" | "gemini" | "huggingface";
-type Selection = "auto" | Provider;
+type Selection = "local" | "auto" | Provider;
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   lovable: "Lovable AI (Gemini 2.5)",
@@ -34,7 +34,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [available, setAvailable] = useState<Provider[]>(["lovable"]);
-  const [selected, setSelected] = useState<Selection>("auto");
+  const [selected, setSelected] = useState<Selection>("local");
   const { toast } = useToast();
 
   // Load which providers this user has keys for. Lovable is always available (managed key).
@@ -84,11 +84,21 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     }
     setIsGenerating(true);
     try {
-      setStatus("순수 하늘 파노라마 생성 중...");
-      const { panorama, stickers } = await callEdge({ action: "plan-and-panorama", prompt }) as {
-        panorama: string;
-        stickers: Sticker[];
-      };
+      let panorama: string;
+      let stickers: Sticker[] = [];
+
+      if (selected === "local") {
+        setStatus("브라우저에서 무료 하늘 파노라마 생성 중...");
+        panorama = createLocalSkyPanorama(prompt);
+      } else {
+        setStatus("순수 하늘 파노라마 생성 중...");
+        const result = await callEdge({ action: "plan-and-panorama", prompt }) as {
+          panorama: string;
+          stickers: Sticker[];
+        };
+        panorama = result.panorama;
+        stickers = result.stickers ?? [];
+      }
 
       setStatus("파노라마를 6면 큐브맵으로 투영 중...");
       const faces = await panoramaToCubemap(panorama, 1024);
@@ -118,7 +128,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       }
 
       onGenerated(FACE_ORDER.map((f) => faces[f]));
-      toast({ title: "생성 완료!", description: "스카이박스가 자연스럽게 연결되었습니다" });
+      toast({ title: "생성 완료!", description: selected === "local" ? "AI 한도 없이 로컬에서 만들었습니다" : "스카이박스가 자연스럽게 연결되었습니다" });
     } catch (error) {
       console.error("Skybox generation error:", error);
       toast({
@@ -156,6 +166,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="local">무료 로컬 생성 (API/한도 없음)</SelectItem>
                 <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
                 {available.map((p) => (
                   <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
@@ -163,7 +174,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              특정 AI만 강제로 쓰려면 선택하세요. /settings에 키를 추가하면 더 많은 옵션이 나타납니다.
+              무료 로컬은 브라우저 Canvas로 생성해서 계정 제한·결제·API 키와 무관하게 작동합니다.
             </p>
           </div>
 
