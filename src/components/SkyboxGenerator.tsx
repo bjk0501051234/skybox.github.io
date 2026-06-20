@@ -13,6 +13,8 @@ import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { createLocalSkyPanorama, panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
+// ▼ 추가: 진짜 로컬 AI 엔진 (WebLLM 계획 + SD-Turbo WebGPU 이미지 생성)
+import { generateLocalSkybox, isWebGpuAvailable } from "@/lib/localAi";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
@@ -88,8 +90,15 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       let stickers: Sticker[] = [];
 
       if (selected === "local") {
-        setStatus("브라우저에서 무료 하늘 파노라마 생성 중...");
-        panorama = createLocalSkyPanorama(prompt);
+        // ── 진짜 로컬 AI: WebLLM(계획) + SD-Turbo(WebGPU 이미지 생성) ──
+        // WebGPU 미지원 시 기존 Canvas 패턴 생성으로 자동 폴백.
+        const result = await generateLocalSkybox(
+          prompt,
+          (msg) => setStatus(msg),
+          (p) => createLocalSkyPanorama(p), // 폴백 함수
+        );
+        panorama = result.panorama;
+        stickers = result.stickers; // 항상 [] → 아래 서버 합성 루프는 건너뜀
       } else {
         setStatus("순수 하늘 파노라마 생성 중...");
         const result = await callEdge({ action: "plan-and-panorama", prompt }) as {
@@ -128,7 +137,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       }
 
       onGenerated(FACE_ORDER.map((f) => faces[f]));
-      toast({ title: "생성 완료!", description: selected === "local" ? "AI 한도 없이 로컬에서 만들었습니다" : "스카이박스가 자연스럽게 연결되었습니다" });
+      toast({ title: "생성 완료!", description: selected === "local" ? "브라우저 로컬 AI(WebGPU)로 생성했습니다" : "스카이박스가 자연스럽게 연결되었습니다" });
     } catch (error) {
       console.error("Skybox generation error:", error);
       toast({
@@ -166,7 +175,9 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="local">무료 로컬 생성 (API/한도 없음)</SelectItem>
+                <SelectItem value="local">
+                  로컬 AI · WebGPU {isWebGpuAvailable() ? "(사용 가능)" : "(미지원 → Canvas 폴백)"}
+                </SelectItem>
                 <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
                 {available.map((p) => (
                   <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
@@ -174,7 +185,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              무료 로컬은 브라우저 Canvas로 생성해서 계정 제한·결제·API 키와 무관하게 작동합니다.
+              로컬 AI는 WebLLM과 SD-Turbo를 브라우저 WebGPU에서 직접 실행합니다. 최초 1회 모델을 자동 다운로드(캐싱)하며 서버·API 키가 필요 없습니다.
             </p>
           </div>
 
