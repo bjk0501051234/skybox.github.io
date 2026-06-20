@@ -161,12 +161,34 @@ function buildPanoramaPrompt(p: string): string {
 SKY: ${p}
 
 HARD RULES:
-- ABSOLUTELY NO discrete objects: no moon, no sun, no stars, no planets, no clouds with hard shapes, no mountains, no horizon line, no buildings, no creatures.
-- Only sky color, gradient, atmospheric glow, soft aurora ribbons, color bands, haze.
-- Must tile/wrap seamlessly left↔right (equirectangular convention).
-- No text, no watermark, no borders, no letterboxing. Fill the entire frame.
-- Smooth, dreamy, painterly-realistic. Will be projected onto a sphere/cube so direction-agnostic.`;
-}
+
+- ABSOLUTELY NO discrete objects: no moon, no sun, no stars, no planets, no buildings, no creatures.
+- NO horizon line, no terrain, no ground elements.
+
+- SKY MUST BE DIVERSE AND MATCH USER INTENT EXACTLY:
+  - red sky if requested (do NOT shift to purple/blue)
+  - blue sky if requested (pure blue, no purple tint)
+  - dark storm sky if requested
+  - sunset must remain warm orange/red tones (not purple)
+
+- DO NOT ADD DEFAULT FANTASY STYLES:
+  - no aurora unless explicitly requested
+  - no dreamy look unless explicitly requested
+  - no cinematic glow unless explicitly requested
+
+- ALLOWED ONLY WHEN USER REQUESTS OR IMPLICITLY FITS CONTEXT:
+  - natural atmospheric scattering
+  - realistic cloudless sky gradients
+
+- COLOR ACCURACY IS PRIORITY:
+  - preserve hue direction (red stays red, blue stays blue)
+  - avoid hue shifting between unrelated colors
+
+- MUST TILE/WRAP seamlessly left↔right (equirectangular projection)
+
+- NO text, watermark, borders, frames, letterboxing
+
+- Output must be physically plausible sky rendering, not stylized fantasy default
 
 async function panoramaWithLovable(prompt: string, key: string): Promise<string> {
   const resp = await fetch(LOVABLE_URL, {
