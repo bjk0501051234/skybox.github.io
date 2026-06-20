@@ -12,7 +12,7 @@ import {
 import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
+import { createLocalSkyPanorama, panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
@@ -21,7 +21,7 @@ interface SkyboxGeneratorProps {
 interface Sticker { face: FaceName; description: string; }
 
 type Provider = "lovable" | "gemini" | "huggingface";
-type Selection = "auto" | Provider;
+type Selection = "local" | "auto" | Provider;
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   lovable: "Lovable AI (Gemini 2.5)",
@@ -34,7 +34,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [available, setAvailable] = useState<Provider[]>(["lovable"]);
-  const [selected, setSelected] = useState<Selection>("auto");
+  const [selected, setSelected] = useState<Selection>("local");
   const { toast } = useToast();
 
   // Load which providers this user has keys for. Lovable is always available (managed key).
