@@ -84,11 +84,21 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     }
     setIsGenerating(true);
     try {
-      setStatus("순수 하늘 파노라마 생성 중...");
-      const { panorama, stickers } = await callEdge({ action: "plan-and-panorama", prompt }) as {
-        panorama: string;
-        stickers: Sticker[];
-      };
+      let panorama: string;
+      let stickers: Sticker[] = [];
+
+      if (selected === "local") {
+        setStatus("브라우저에서 무료 하늘 파노라마 생성 중...");
+        panorama = createLocalSkyPanorama(prompt);
+      } else {
+        setStatus("순수 하늘 파노라마 생성 중...");
+        const result = await callEdge({ action: "plan-and-panorama", prompt }) as {
+          panorama: string;
+          stickers: Sticker[];
+        };
+        panorama = result.panorama;
+        stickers = result.stickers ?? [];
+      }
 
       setStatus("파노라마를 6면 큐브맵으로 투영 중...");
       const faces = await panoramaToCubemap(panorama, 1024);
@@ -118,7 +128,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       }
 
       onGenerated(FACE_ORDER.map((f) => faces[f]));
-      toast({ title: "생성 완료!", description: "스카이박스가 자연스럽게 연결되었습니다" });
+      toast({ title: "생성 완료!", description: selected === "local" ? "AI 한도 없이 로컬에서 만들었습니다" : "스카이박스가 자연스럽게 연결되었습니다" });
     } catch (error) {
       console.error("Skybox generation error:", error);
       toast({
