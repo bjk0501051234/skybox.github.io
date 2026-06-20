@@ -134,3 +134,84 @@ export async function panoramaToCubemap(panoramaDataUrl: string, faceSize = 1024
 
   return result;
 }
+
+export function createLocalSkyPanorama(prompt: string, width = 2048, height = 1024): string {
+  const lower = prompt.toLowerCase();
+  const rnd = seededRandom(prompt || "skybox");
+  const night = /night|밤|별|달|aurora|오로라|space|우주/.test(lower);
+  const sunset = /sunset|sunrise|노을|석양|일출|분홍|orange|pink/.test(lower);
+  const storm = /storm|thunder|폭풍|먹구름|회색|gray|grey/.test(lower);
+  const aurora = /aurora|오로라|북극광|green|초록|보라|purple/.test(lower);
+
+  const zenith: Rgb = night ? [11, 18, 44] : storm ? [78, 89, 104] : sunset ? [65, 102, 178] : [57, 132, 219];
+  const horizon: Rgb = night ? [32, 45, 86] : storm ? [154, 165, 172] : sunset ? [255, 153, 109] : [186, 225, 255];
+  const nadir: Rgb = night ? [6, 10, 28] : storm ? [99, 109, 118] : sunset ? [92, 66, 114] : [119, 181, 229];
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d")!;
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, rgba(zenith));
+  gradient.addColorStop(0.48, rgba(horizon));
+  gradient.addColorStop(0.58, rgba(horizon));
+  gradient.addColorStop(1, rgba(nadir));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.globalCompositeOperation = "screen";
+  for (let band = 0; band < 4; band++) {
+    const y = height * (0.28 + rnd() * 0.34);
+    const hue = aurora ? (rnd() > 0.5 ? [96, 255, 185] : [171, 111, 255]) : mix(horizon, [255, 255, 255], 0.35);
+    const line = ctx.createLinearGradient(0, y - 180, 0, y + 180);
+    line.addColorStop(0, rgba(hue as Rgb, 0));
+    line.addColorStop(0.5, rgba(hue as Rgb, aurora ? 0.28 : 0.12));
+    line.addColorStop(1, rgba(hue as Rgb, 0));
+    ctx.fillStyle = line;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= width; x += 80) {
+      ctx.lineTo(x, y + Math.sin(x * 0.006 + band * 2.3) * (24 + rnd() * 28));
+    }
+    ctx.lineTo(width, y + 260);
+    ctx.lineTo(0, y + 260);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+
+  if (night) {
+    ctx.fillStyle = "rgba(255,255,255,0.82)";
+    for (let i = 0; i < 260; i++) {
+      const x = rnd() * width;
+      const y = rnd() * height * 0.48;
+      const r = 0.55 + rnd() * 1.25;
+      ctx.globalAlpha = 0.3 + rnd() * 0.7;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (!/no cloud|구름없|구름 없이/.test(lower)) {
+    ctx.globalAlpha = night ? 0.18 : 0.32;
+    for (let i = 0; i < 18; i++) {
+      const x = rnd() * width;
+      const y = height * (0.34 + rnd() * 0.22);
+      const w = width * (0.08 + rnd() * 0.12);
+      const h = height * (0.018 + rnd() * 0.035);
+      const cloud = ctx.createRadialGradient(x, y, 0, x, y, w);
+      cloud.addColorStop(0, "rgba(255,255,255,0.75)");
+      cloud.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = cloud;
+      ctx.beginPath();
+      ctx.ellipse(x, y, w, h, rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  return canvas.toDataURL("image/png");
+}
