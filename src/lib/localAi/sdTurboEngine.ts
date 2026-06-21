@@ -99,7 +99,6 @@ async function downloadModel(url: string, onS?: (s: string) => void) {
       const pct = Math.round((got / total) * 100);
       onS?.(`${pct}%  (${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB)`);
     }
-  }
 
   const buf = new Uint8Array(got);
   let off = 0;
