@@ -88,7 +88,6 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       let panorama: string;
       let stickers: Sticker[] = [];
 
-      if (selected === "local") {
 if (selected === "local") {
   const optimizedPrompt =
     await planWithWebLLM(prompt, setStatus);
