@@ -52,6 +52,7 @@ async function getOrt(): Promise<OrtMod> {
 }
 
 // ── downloadModel (완전 수정됨) ─────────────────────────────────────────────
+// downloadModel 함수 수정
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
@@ -68,80 +69,38 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
     debugLog('❌ [downloadModel] 토큰 없음!');
     throw new Error("❌ HuggingFace 토큰이 없습니다.");
   }
-  debugLog('✅ [downloadModel] 토큰 확인', token.slice(0, 10) + '...');
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
-  // 🔥 fetch 요청 (mode: 'cors', credentials: 'omit' 추가!)
-  debugLog('📥 [downloadModel] fetch 시작', { url });
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    mode: 'cors',
-    credentials: 'omit',  // 🔥 인증 정보 제외!
-  });
-
-  debugLog('📥 [downloadModel] fetch 응답', {
-    status: response.status,
-    statusText: response.statusText,
-    ok: response.ok,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-
-  if (!response.ok) {
-    debugLog('❌ [downloadModel] HTTP 에러!', response.status);
-    throw new Error(`HTTP ${response.status}: ${url}`);
-  }
-
-  // 🔥 Stream 방식으로 읽기 (메모리 최적화)
   try {
-    debugLog('📥 [downloadModel] Stream 읽기 시작...');
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No reader available');
-
-    const chunks: Uint8Array[] = [];
-    let totalLength = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      totalLength += value.length;
-      
-      // 진행 상황 표시
-      if (totalLength > 0 && onS) {
-        const pct = Math.min(100, Math.round((totalLength / 681393168) * 100));
-        onS?.(`${pct}% (${(totalLength / 1e6).toFixed(1)} MB)`);
-      }
-    }
-
-    debugLog('📥 [downloadModel] Stream 읽기 완료', {
-      totalLength,
-      chunks: chunks.length,
+    // 🔥 직접 fetch (no-cors 모드)
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      mode: 'no-cors', // 🔥 CORS 완전 우회!
     });
 
-    // Chunk 병합
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    debugLog('✅ [downloadModel] ArrayBuffer 변환 완료!', {
-      byteLength: result.byteLength,
-      sizeMB: (result.byteLength / 1e6).toFixed(2) + ' MB'
+    debugLog('📥 [downloadModel] no-cors 응답', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      type: response.type,
     });
 
-    return result.buffer;
+    // no-cors 모드에서는 ok, status 등을 신뢰할 수 없음
+    // 그래서 ArrayBuffer 변환 시도
+    const arrayBuffer = await response.arrayBuffer();
+    debugLog('✅ [downloadModel] 다운로드 완료!', {
+      byteLength: arrayBuffer.byteLength,
+    });
+    
+    return arrayBuffer;
   } catch (err) {
-    debugLog('❌ [downloadModel] Stream 읽기 실패!', err);
+    debugLog('❌ [downloadModel] fetch 실패!', err);
     throw err;
   }
 }
-
 // sdTurboEngine.ts - makeSession 함수 수정
 async function makeSession(
   url: string,
