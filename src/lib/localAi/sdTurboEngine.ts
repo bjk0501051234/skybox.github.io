@@ -55,8 +55,6 @@ async function getOrt(): Promise<OrtMod> {
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
-  // 1. Supabase 조회
-  debugLog('📥 [downloadModel] Supabase 토큰 조회 중...');
   const { data, error } = await supabase
     .from("user_api_keys")
     .select("api_key")
@@ -74,14 +72,15 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
-  // 2. fetch 요청 (mode: 'cors' 추가!)
+  // 🔥 fetch 요청 (mode: 'cors', credentials: 'omit' 추가!)
   debugLog('📥 [downloadModel] fetch 시작', { url });
   const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    mode: 'cors',  // 🔥 CORS 모드 명시
+    mode: 'cors',
+    credentials: 'omit',  // 🔥 인증 정보 제외!
   });
 
   debugLog('📥 [downloadModel] fetch 응답', {
@@ -96,21 +95,52 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
     throw new Error(`HTTP ${response.status}: ${url}`);
   }
 
-  // 3. ArrayBuffer 변환 (try-catch 추가!)
+  // 🔥 Stream 방식으로 읽기 (메모리 최적화)
   try {
-    debugLog('📥 [downloadModel] arrayBuffer 변환 시작...');
-    const arrayBuffer = await response.arrayBuffer();
-    debugLog('✅ [downloadModel] arrayBuffer 변환 완료!', {
-      byteLength: arrayBuffer.byteLength,
-      sizeMB: (arrayBuffer.byteLength / 1e6).toFixed(2) + ' MB'
+    debugLog('📥 [downloadModel] Stream 읽기 시작...');
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No reader available');
+
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalLength += value.length;
+      
+      // 진행 상황 표시
+      if (totalLength > 0 && onS) {
+        const pct = Math.min(100, Math.round((totalLength / 681393168) * 100));
+        onS?.(`${pct}% (${(totalLength / 1e6).toFixed(1)} MB)`);
+      }
+    }
+
+    debugLog('📥 [downloadModel] Stream 읽기 완료', {
+      totalLength,
+      chunks: chunks.length,
     });
-    return arrayBuffer;
+
+    // Chunk 병합
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    debugLog('✅ [downloadModel] ArrayBuffer 변환 완료!', {
+      byteLength: result.byteLength,
+      sizeMB: (result.byteLength / 1e6).toFixed(2) + ' MB'
+    });
+
+    return result.buffer;
   } catch (err) {
-    debugLog('❌ [downloadModel] arrayBuffer 변환 실패!', err);
+    debugLog('❌ [downloadModel] Stream 읽기 실패!', err);
     throw err;
   }
 }
-
 // ── makeSession ─────────────────────────────────────────────────────────────
 async function makeSession(
   url: string,
