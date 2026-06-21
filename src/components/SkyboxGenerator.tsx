@@ -39,6 +39,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [available, setAvailable] = useState<Provider[]>(["lovable"]);
   const [selected, setSelected] = useState<Selection>("local");
   const { toast } = useToast();
+  const [hasHFToken, setHasHFToken] = useState(false); 
 
 
   // 사용자 API 키 로드
