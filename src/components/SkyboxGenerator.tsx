@@ -151,7 +151,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     }
   };
 
-  const localBlocked = selected === "local" && gpuOk === false;
+  const localBlocked = false;
 
   return (
     <div className="gradient-card p-8 rounded-xl shadow-elevation border border-border/50">
