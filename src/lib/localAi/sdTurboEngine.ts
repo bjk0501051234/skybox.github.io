@@ -51,7 +51,7 @@ async function getOrt(): Promise<OrtMod> {
   return _ort;
 }
 
-// downloadModel 함수 - 프록시 사용!
+// downloadModel 함수 - arrayBuffer 변환 부분만 수정
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
@@ -71,7 +71,6 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
-  // 🔥 CORS-anywhere 프록시 사용 (no-cors 대신!)
   const PROXY = "https://cors-anywhere.herokuapp.com/";
   const proxiedUrl = PROXY + url;
 
@@ -81,7 +80,7 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
     headers: {
       'Authorization': `Bearer ${token}`,
     },
-    mode: 'cors', // 🔥 CORS 모드 (프록시가 처리)
+    mode: 'cors',
   });
 
   debugLog('📥 [downloadModel] 프록시 응답', {
@@ -89,19 +88,36 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
     statusText: response.statusText,
     ok: response.ok,
     headers: Object.fromEntries(response.headers.entries()),
+    contentType: response.headers.get('content-type'),
   });
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${url}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  debugLog('✅ [downloadModel] 다운로드 완료!', {
-    byteLength: arrayBuffer.byteLength,
-    sizeMB: (arrayBuffer.byteLength / 1e6).toFixed(2) + ' MB'
-  });
+  // 🔥 arrayBuffer 변환을 try-catch로 감싸고, Blob으로 먼저 읽어보기
+  try {
+    debugLog('📥 [downloadModel] arrayBuffer 변환 시도...');
+    
+    // 먼저 Blob으로 읽기
+    const blob = await response.blob();
+    debugLog('📥 [downloadModel] Blob 읽기 성공', {
+      size: blob.size,
+      type: blob.type,
+    });
 
-  return arrayBuffer;
+    // Blob을 ArrayBuffer로 변환
+    const arrayBuffer = await blob.arrayBuffer();
+    debugLog('✅ [downloadModel] ArrayBuffer 변환 완료!', {
+      byteLength: arrayBuffer.byteLength,
+      sizeMB: (arrayBuffer.byteLength / 1e6).toFixed(2) + ' MB'
+    });
+
+    return arrayBuffer;
+  } catch (err) {
+    debugLog('❌ [downloadModel] 변환 실패!', err);
+    throw err;
+  }
 }
 
 // sdTurboEngine.ts - makeSession 함수 수정
