@@ -93,10 +93,10 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       let stickers: Sticker[] = [];
 
       if (selected === "local") {
-        // ── 로컬 WebGPU AI 경로 ────────────────────────────────────────────
-        const raw = await runLocalDiffusion(prompt, setStatus);
-        setStatus("이미지를 파노라마 형식으로 변환 중...");
-        panorama = await tileToEquirect(raw);
+        // ── 로컬 캔버스 생성 (무료, 의존성 없음) ───────────────────────────
+        setStatus("로컬에서 하늘 파노라마 생성 중...");
+        panorama = createLocalSkyPanorama(prompt, 2048, 1024);
+
       } else {
         // ── 클라우드 API 경로 (기존 그대로) ──────────────────────────────
         setStatus("순수 하늘 파노라마 생성 중...");
