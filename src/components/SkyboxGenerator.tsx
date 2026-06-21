@@ -194,7 +194,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="local">
-                  🧠 로컬 AI (WebGPU · LCM · 완전 무료)
+                  🎨 로컬 캔버스 (완전 무료, 즉시 생성)
                 </SelectItem>
                 <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
                 {available.map((p) => (
