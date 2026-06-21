@@ -135,7 +135,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
         title: "생성 완료!",
         description:
           selected === "local"
-            ? "WebGPU 로컬 AI로 생성했습니다 🎉"
+            ? "로컬 캔버스로 즉시 생성했습니다 🎉"
             : "스카이박스가 자연스럽게 연결되었습니다",
       });
     } catch (err) {
