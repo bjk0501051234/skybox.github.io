@@ -141,37 +141,24 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
     throw err;
   }
 }
-// ── makeSession ─────────────────────────────────────────────────────────────
+
+// sdTurboEngine.ts - makeSession 함수 수정
 async function makeSession(
   url: string,
   o: OrtMod,
   onS?: (s: string) => void
 ): Promise<OrtSess> {
-  debugLog('🔧 [makeSession] 시작', { url });
-  
   const buf = await downloadModel(url, onS);
-  debugLog('🔧 [makeSession] downloadModel 완료, 버퍼 크기:', buf.byteLength);
-
   const opt = { graphOptimizationLevel: "all" as const };
 
-  try {
-    debugLog('🔧 [makeSession] WebGPU 세션 생성 시도...');
-    const session = await o.InferenceSession.create(new Uint8Array(buf), {
-      ...opt,
-      executionProviders: ["webgpu"],
-    });
-    debugLog('✅ [makeSession] WebGPU 세션 생성 성공!');
-    return session;
-  } catch (e) {
-    console.warn("[SD] WebGPU 실패 → WASM 폴백:", e);
-    debugLog('🔧 [makeSession] WebGPU 실패, WASM 폴백 시도...');
-    const session = await o.InferenceSession.create(new Uint8Array(buf), {
-      ...opt,
-      executionProviders: ["wasm"],
-    });
-    debugLog('✅ [makeSession] WASM 세션 생성 성공!');
-    return session;
-  }
+  // 🔥 WebGPU 시도하지 않고 바로 WASM 사용!
+  console.warn("[SD] GPU 메모리 부족 감지 → WASM 강제 사용!");
+  onS?.("GPU 메모리 부족 → CPU(WASM) 모드로 전환 중...");
+  
+  return await o.InferenceSession.create(new Uint8Array(buf), {
+    ...opt,
+    executionProviders: ["wasm"], // 🔥 WASM 강제!
+  });
 }
 
 // ── ensureModels ────────────────────────────────────────────────────────────
