@@ -8,9 +8,9 @@ type OrtTens = InstanceType<OrtMod["Tensor"]>;
 // sdTurboEngine.ts - Git LFS 경로 사용!
 const HF = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
 const URLS = {
-  te: `${HF}resolve/main/text_encoder/model.onnx?download=1`, // LFS 경로!
-  un: `${HF}resolve/main/unet/model_fp16.onnx?download=1`,
-  vae: `${HF}resolve/main/vae_decoder/model.onnx?download=1`,
+  te: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/text_encoder/model.onnx",
+  un: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/unet/model.onnx",
+  vae: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/vae_decoder/model.onnx",
 };
 
 async function makeSession(
