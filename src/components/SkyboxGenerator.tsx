@@ -1,3 +1,5 @@
+import { planWithWebLLM } from "@/lib/localAi/webllmPlanner";
+import { generateWithSDTurbo } from "@/lib/localAi/sdTurboEngine";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +14,6 @@ import {
 import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { panoramaToCubemap, createLocalSkyPanorama, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
@@ -88,12 +89,18 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       let stickers: Sticker[] = [];
 
       if (selected === "local") {
-        // ── 로컬 캔버스 생성 (무료, 의존성 없음) ───────────────────────────
-        setStatus("로컬에서 하늘 파노라마 생성 중...");
-        panorama = createLocalSkyPanorama(prompt, 2048, 1024);
+if (selected === "local") {
+  const optimizedPrompt =
+    await planWithWebLLM(prompt, setStatus);
 
-      } else {
-        // ── 클라우드 API 경로 (기존 그대로) ──────────────────────────────
+  panorama =
+    await generateWithSDTurbo(
+      optimizedPrompt,
+      setStatus
+    );
+
+} else {
+  // ── 클라우드 API 경로 (기존 그대로) ──────────────────────────────
         setStatus("순수 하늘 파노라마 생성 중...");
         const result = await callEdge({ action: "plan-and-panorama", prompt }) as {
           panorama: string;
