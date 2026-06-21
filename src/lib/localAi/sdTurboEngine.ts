@@ -120,29 +120,6 @@ async function downloadModel(
   return buf.buffer;
 }
 
-const token = data?.api_key;
-if (!token) throw new Error("HF 토큰 없음. Settings에서 등록하세요.");
-
-const r = await fetch(url, {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
-
-  const total  = +(r.headers.get("content-length") ?? 0);
-  const reader = r.body!.getReader();
-  const chunks: Uint8Array[] = [];
-  let got = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    got += value.length;
-    if (total > 0) {
-      const pct = Math.round((got / total) * 100);
-      onS?.(`${pct}%  (${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB)`);
-    }
-  }
 
   const buf = new Uint8Array(got);
   let off = 0;
