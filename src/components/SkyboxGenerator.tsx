@@ -204,7 +204,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
             </Select>
             <p className="text-xs text-muted-foreground">
               {selected === "local"
-                ? "실제 AI 추론 · 서버·API 키·과금 없음 · 모델은 IndexedDB에 자동 캐시됩니다."
+                ? "프롬프트 키워드(밤/노을/오로라/폭풍)에 맞춰 캔버스로 즉시 그립니다."
                 : "클라우드 API를 통해 고품질 이미지를 생성합니다."}
             </p>
           </div>
