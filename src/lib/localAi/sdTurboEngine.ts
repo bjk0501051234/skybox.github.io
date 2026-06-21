@@ -81,8 +81,9 @@ async function downloadModel(
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
   
-  // 🔑 토큰을 헤더에 포함해서 요청
-  const r = await fetch(url, {
+  // 🔥 CORS 우회 프록시 사용!
+  const PROXY = "https://cors-anywhere.herokuapp.com/";
+  const r = await fetch(PROXY + url, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -95,6 +96,8 @@ async function downloadModel(
       "Settings에서 토큰을 다시 확인하고 등록해주세요."
     );
   }
+
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
 
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
 
