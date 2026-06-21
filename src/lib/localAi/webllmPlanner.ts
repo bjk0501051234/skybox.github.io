@@ -1,10 +1,8 @@
+import { CreateMLCEngine, MLCEngine } from "@mlc-ai/web-llm";
+
+let _engine: MLCEngine | null = null;
+
 // GTX 1080 (no shader-f16) → q4f32_1 자동 선택
-type MlcEngine = Awaited<ReturnType
-  Awaited<typeof import("@mlc-ai/web-llm")>["CreateMLCEngine"]
->>;
-
-let _engine: MlcEngine | null = null;
-
 async function pickModel(): Promise<string> {
   try {
     const adapter = await navigator.gpu?.requestAdapter();
@@ -23,7 +21,6 @@ export async function planWithWebLLM(
   if (!_engine) {
     const modelId = await pickModel();
     onStatus?.(`WebLLM (${modelId}) 초기화 중... 최초 1회 ~1GB`);
-    const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
     _engine = await CreateMLCEngine(modelId, {
       initProgressCallback: (info) => {
         const p = Math.round(info.progress * 100);
@@ -47,6 +44,7 @@ export async function planWithWebLLM(
     temperature: 0.6,
     max_tokens: 120,
   });
+
   const out = res.choices[0].message.content?.trim() ?? koreanPrompt;
   console.log("[WebLLM] →", out);
   return out;
