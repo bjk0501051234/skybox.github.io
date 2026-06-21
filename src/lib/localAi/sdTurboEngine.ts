@@ -62,7 +62,19 @@ async function downloadModel(
   onS?: (s: string) => void
 ): Promise<ArrayBuffer> {
   onS?.(`다운로드: ${url.split("/").pop()}`);
-  const r = await fetch(url);
+  // ✅ 수정할 코드
+const { data } = await supabase
+  .from("user_api_keys")
+  .select("api_key")
+  .eq("provider", "huggingface")
+  .single();
+
+const token = data?.api_key;
+if (!token) throw new Error("HF 토큰 없음. Settings에서 등록하세요.");
+
+const r = await fetch(url, {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
 
   const total  = +(r.headers.get("content-length") ?? 0);
