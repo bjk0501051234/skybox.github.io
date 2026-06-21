@@ -6,7 +6,7 @@ type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
 type OrtTens = InstanceType<OrtMod["Tensor"]>;
 
 // sdTurboEngine.ts - Git LFS 경로 사용!
-const HF = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
+const HF = "https://huggingface.co/schmuell/sd-turbo/";
 // sdTurboEngine.ts - URLS 완전 교체!
 const URLS = {
   te: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/text_encoder/model.onnx",
