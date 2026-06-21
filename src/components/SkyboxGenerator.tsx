@@ -83,6 +83,25 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     toast({ title: "프롬프트를 입력하세요", variant: "destructive" });
     return;
   }
+
+  // 🔑 로컬 모드일 때 HF 토큰 체크
+  if (selected === "local") {
+    const { data } = await supabase
+      .from("user_api_keys")
+      .select("api_key")
+      .eq("provider", "huggingface")
+      .single();
+
+    if (!data?.api_key) {
+      toast({
+        title: "HF 토큰 필요",
+        description: "Settings에서 HuggingFace Access Token을 등록해주세요.",
+        variant: "destructive",
+      });
+      return;
+    }
+  }
+
   setIsGenerating(true);
   try {
     let panorama: string;
