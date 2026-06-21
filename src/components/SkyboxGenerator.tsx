@@ -262,3 +262,4 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     </div>
   </div>
 );
+}
