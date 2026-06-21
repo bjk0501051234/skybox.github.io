@@ -13,6 +13,30 @@ const URLS = {
   vae: `${HF}resolve/main/vae_decoder/model.onnx?download=1`,
 };
 
+async function makeSession(
+  url: string,
+  o: OrtMod,
+  onS?: (s: string) => void
+): Promise<OrtSess> {
+  const buf = await downloadModel(url, onS);
+  const opt = { graphOptimizationLevel: "all" as const };
+
+  try {
+    onS?.("WebGPU 세션 생성 중...");
+    return await o.InferenceSession.create(new Uint8Array(buf), {
+      ...opt,
+      executionProviders: ["webgpu"],
+    });
+  } catch (e) {
+    console.warn("[SD] WebGPU 실패 → WASM 폴백:", e);
+    onS?.("WebGPU 불가 → CPU(WASM) 전환 중...");
+    return await o.InferenceSession.create(new Uint8Array(buf), {
+      ...opt,
+      executionProviders: ["wasm"],
+    });
+  }
+}
+
 // ── DDPM 스케줄러 (alpha_cumprod) ────────────────────────────────────────────
 function buildAlphas(n = 1000): Float32Array {
   const a = new Float32Array(n);
