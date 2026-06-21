@@ -9,6 +9,9 @@
 // ⚠ UNet은 fp16 ONNX → WebGPU 실패 시 WASM(CPU)으로 자동 전환.
 //   WASM은 느리지만 확실히 작동 (CPU 성능에 따라 30초~수분).
 
+
+import { supabase } from "@/integrations/supabase/client";
+
 // ── 타입 ────────────────────────────────────────────────────────────────────
 type OrtMod  = typeof import("onnxruntime-web");
 type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
@@ -61,13 +64,61 @@ async function downloadModel(
   url: string,
   onS?: (s: string) => void
 ): Promise<ArrayBuffer> {
+  // 🔑 Settings에서 저장한 HF 토큰 가져오기
+  const { data } = await supabase
+    .from("user_api_keys")
+    .select("api_key")
+    .eq("provider", "huggingface")
+    .single();
+
+  const token = data?.api_key;
+  if (!token) {
+    throw new Error(
+      "❌ HuggingFace 토큰이 없습니다.\n" +
+      "Settings 페이지에서 HuggingFace Access Token을 등록해주세요."
+    );
+  }
+
   onS?.(`다운로드: ${url.split("/").pop()}`);
-  // ✅ 수정할 코드
-const { data } = await supabase
-  .from("user_api_keys")
-  .select("api_key")
-  .eq("provider", "huggingface")
-  .single();
+  
+  // 🔑 토큰을 헤더에 포함해서 요청
+  const r = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    }
+  });
+
+  if (r.status === 401) {
+    throw new Error(
+      "❌ HuggingFace 토큰이 유효하지 않습니다.\n" +
+      "Settings에서 토큰을 다시 확인하고 등록해주세요."
+    );
+  }
+
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
+
+  const total  = +(r.headers.get("content-length") ?? 0);
+  const reader = r.body!.getReader();
+  const chunks: Uint8Array[] = [];
+  let got = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    if (total > 0) {
+      const pct = Math.round((got / total) * 100);
+      onS?.(`${pct}%  (${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB)`);
+    }
+  }
+
+  const buf = new Uint8Array(got);
+  let off = 0;
+  for (const c of chunks) { buf.set(c, off); off += c.length; }
+  return buf.buffer;
+}
 
 const token = data?.api_key;
 if (!token) throw new Error("HF 토큰 없음. Settings에서 등록하세요.");
