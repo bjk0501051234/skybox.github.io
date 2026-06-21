@@ -9,11 +9,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Cpu, Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-// createLocalSkyPanorama 제거 — WebGPU AI로 대체됨
-import { panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
+import { panoramaToCubemap, createLocalSkyPanorama, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
@@ -30,176 +29,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  로컬 WebGPU AI — 모듈 레벨 싱글턴 (컴포넌트 re-render 사이에도 유지됨)
-//
-//  라이브러리 : @huggingface/transformers  (npm install @huggingface/transformers)
-//  모델       : Xenova/lcm-dreamshaper-v7  (~600 MB, IndexedDB 캐시)
-//  대안 모델  : Xenova/sd-turbo (더 작음, guidance_scale=0.0, steps=1~4)
-// ══════════════════════════════════════════════════════════════════════════════
-let _pipe: unknown = null;
-let _loadPromise: Promise<unknown> | null = null;
 
-async function loadPipeline(onStatus: (s: string) => void): Promise<unknown> {
-  if (_pipe) return _pipe;
-  if (_loadPromise) return _loadPromise;
-
-  _loadPromise = (async () => {
-    // ① WebGPU 지원 체크
-    if (!("gpu" in navigator)) {
-      throw new Error(
-        "WebGPU 미지원 브라우저입니다. Chrome 113+ 또는 Edge 113+를 사용하세요."
-      );
-    }
-    const adapter = await (navigator as { gpu: { requestAdapter: () => Promise<unknown> } })
-      .gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error("GPU 어댑터를 찾을 수 없습니다. 하드웨어 GPU가 필요합니다.");
-    }
-
-    // ② 라이브러리 동적 import (번들 분리 → 로컬 AI 미사용 시 로드 안 함)
-    onStatus("📦 Transformers.js 모듈 로딩 중...");
-    const { AutoPipelineForText2Image, env } = await import(
-      "@huggingface/transformers"
-    );
-
-    // 원격 모델만 허용, IndexedDB 캐시 ON
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-
-    // ③ 모델 로드 (첫 실행 시 HuggingFace Hub에서 다운로드 → IndexedDB 캐시)
-    const pipe = await AutoPipelineForText2Image.from_pretrained(
-      "Xenova/lcm-dreamshaper-v7",
-      {
-        dtype: "fp16",  // WebGPU fp16 추론
-        device: "webgpu",
-        progress_callback: (p: { status: string; progress?: number; file?: string }) => {
-          if (p.status === "progress") {
-            const pct = Math.round(p.progress ?? 0);
-            onStatus(`⬇️ 모델 다운로드 ${pct}% … (첫 실행 후 캐시됨)`);
-          } else if (p.status === "done") {
-            onStatus(`✅ ${p.file ?? "모델"} 로드 완료`);
-          } else if (p.status === "ready") {
-            onStatus("🚀 파이프라인 준비 완료!");
-          }
-        },
-      }
-    );
-
-    _pipe = pipe;
-    _loadPromise = null;
-    return pipe;
-  })();
-
-  return _loadPromise;
-}
-
-/** Stable Diffusion LCM으로 브라우저 내 이미지 생성 → base64 PNG 반환 */
-async function runLocalDiffusion(
-  prompt: string,
-  onStatus: (s: string) => void
-): Promise<string> {
-  const pipe = await loadPipeline(onStatus);
-
-  const enhancedPrompt =
-    `${prompt}, seamless panoramic sky, 360 degree view, ` +
-    "photorealistic, high quality, cinematic lighting, pure sky, no ground, no horizon line";
-
-  onStatus("🎨 GPU 추론 중… (20초~3분, GPU 성능에 따라 다름)");
-
-  // LCM 모델 최적 파라미터 (적은 스텝, 낮은 guidance)
-  const output = await (pipe as (
-    prompt: string,
-    opts: Record<string, unknown>
-  ) => Promise<unknown>)(enhancedPrompt, {
-    num_inference_steps: 8,
-    guidance_scale: 1.5,
-    width: 512,
-    height: 512,
-  });
-
-  // ── RawImage → HTMLCanvasElement → base64 ──────────────────────────────
-  type RawImageLike = {
-    toCanvas?: () => HTMLCanvasElement;
-    width?: number;
-    height?: number;
-    data?: Uint8ClampedArray | number[];
-    src?: string;
-  };
-
-  const raw = (
-    Array.isArray(output)
-      ? output[0]
-      : (output as { images?: unknown[] })?.images?.[0] ?? output
-  ) as RawImageLike;
-
-  let canvas: HTMLCanvasElement;
-
-  if (typeof raw?.toCanvas === "function") {
-    // Transformers.js RawImage — 가장 일반적인 경로
-    canvas = raw.toCanvas();
-  } else if (raw instanceof HTMLCanvasElement) {
-    canvas = raw;
-  } else {
-    // 폴백: ImageData 직접 구성
-    const w = raw?.width ?? 512;
-    const h = raw?.height ?? 512;
-    canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d")!;
-
-    if (raw?.data) {
-      ctx.putImageData(
-        new ImageData(new Uint8ClampedArray(raw.data), w, h),
-        0,
-        0
-      );
-    } else if (raw?.src) {
-      await new Promise<void>((res) => {
-        const el = new Image();
-        el.onload = () => { ctx.drawImage(el, 0, 0); res(); };
-        el.src = raw.src!;
-      });
-    }
-  }
-
-  return canvas.toDataURL("image/png");
-}
-
-/**
- * 512×512 AI 이미지 → 1024×512 equirectangular 파노라마로 타일링
- * (좌우 이음새 소프트 블렌드 포함)
- */
-function tileToEquirect(src: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const w = img.width;
-      const h = img.height;
-      const cv = document.createElement("canvas");
-      cv.width = w * 2;
-      cv.height = h;
-      const ctx = cv.getContext("2d")!;
-
-      // 좌우 타일
-      ctx.drawImage(img, 0, 0);
-      ctx.drawImage(img, w, 0);
-
-      // 이음새 블렌드 (96px 소프트 그라디언트)
-      const g = ctx.createLinearGradient(w - 48, 0, w + 48, 0);
-      g.addColorStop(0, "rgba(0,0,0,0)");
-      g.addColorStop(0.5, "rgba(0,0,0,0.12)");
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(w - 48, 0, 96, h);
-
-      resolve(cv.toDataURL("image/png"));
-    };
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-// ══════════════════════════════════════════════════════════════════════════════
 
 export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [prompt, setPrompt] = useState("");
@@ -207,13 +37,8 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [status, setStatus] = useState<string>("");
   const [available, setAvailable] = useState<Provider[]>(["lovable"]);
   const [selected, setSelected] = useState<Selection>("local");
-  const [gpuOk, setGpuOk] = useState<boolean | null>(null);
   const { toast } = useToast();
 
-  // WebGPU 지원 여부 사전 체크
-  useEffect(() => {
-    setGpuOk("gpu" in navigator);
-  }, []);
 
   // 사용자 API 키 로드
   useEffect(() => {
@@ -263,10 +88,10 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
       let stickers: Sticker[] = [];
 
       if (selected === "local") {
-        // ── 로컬 WebGPU AI 경로 ────────────────────────────────────────────
-        const raw = await runLocalDiffusion(prompt, setStatus);
-        setStatus("이미지를 파노라마 형식으로 변환 중...");
-        panorama = await tileToEquirect(raw);
+        // ── 로컬 캔버스 생성 (무료, 의존성 없음) ───────────────────────────
+        setStatus("로컬에서 하늘 파노라마 생성 중...");
+        panorama = createLocalSkyPanorama(prompt, 2048, 1024);
+
       } else {
         // ── 클라우드 API 경로 (기존 그대로) ──────────────────────────────
         setStatus("순수 하늘 파노라마 생성 중...");
@@ -310,7 +135,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
         title: "생성 완료!",
         description:
           selected === "local"
-            ? "WebGPU 로컬 AI로 생성했습니다 🎉"
+            ? "로컬 캔버스로 즉시 생성했습니다 🎉"
             : "스카이박스가 자연스럽게 연결되었습니다",
       });
     } catch (err) {
@@ -326,7 +151,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
     }
   };
 
-  const localBlocked = selected === "local" && gpuOk === false;
+  const localBlocked = false;
 
   return (
     <div className="gradient-card p-8 rounded-xl shadow-elevation border border-border/50">
@@ -341,26 +166,16 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
 
           <p className="text-sm text-muted-foreground">
             {selected === "local"
-              ? "Transformers.js + WebGPU로 브라우저 안에서 실제 Stable Diffusion LCM을 실행합니다. 첫 실행 시 약 600 MB 다운로드 후 IndexedDB에 캐시됩니다."
+              ? "브라우저 캔버스로 즉시 하늘 텍스처를 생성합니다. 서버·API 키·과금 전부 없음."
               : "먼저 순수 하늘 1장을 만들고 6면으로 잘라 붙여 이음새를 없앤 뒤, 달·구름 같은 오브젝트만 면별로 자연스럽게 합성합니다."}
           </p>
 
-          {/* WebGPU 상태 배지 */}
-          {selected === "local" && gpuOk === false && (
-            <p className="text-xs text-destructive font-medium">
-              ⚠️ WebGPU 미지원 브라우저 — Chrome 113+ 또는 Edge 113+ 필요
-            </p>
-          )}
-          {selected === "local" && gpuOk === true && (
-            <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-              <Cpu className="h-3 w-3" /> WebGPU 사용 가능 · LCM DreamShaper v7
-            </p>
-          )}
           {selected !== "local" && (
             <p className="text-xs text-muted-foreground">
               예: "보라색 오로라 밤하늘, 왼쪽에 큰 보름달 하나, 앞면에 푹신한 구름 몇 개"
             </p>
           )}
+
         </div>
 
         {/* 폼 */}
@@ -379,7 +194,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="local">
-                  🧠 로컬 AI (WebGPU · LCM · 완전 무료)
+                  🎨 로컬 캔버스 (완전 무료, 즉시 생성)
                 </SelectItem>
                 <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
                 {available.map((p) => (
@@ -389,7 +204,7 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
             </Select>
             <p className="text-xs text-muted-foreground">
               {selected === "local"
-                ? "실제 AI 추론 · 서버·API 키·과금 없음 · 모델은 IndexedDB에 자동 캐시됩니다."
+                ? "프롬프트 키워드(밤/노을/오로라/폭풍)에 맞춰 캔버스로 즉시 그립니다."
                 : "클라우드 API를 통해 고품질 이미지를 생성합니다."}
             </p>
           </div>
