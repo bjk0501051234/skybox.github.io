@@ -51,8 +51,7 @@ async function getOrt(): Promise<OrtMod> {
   return _ort;
 }
 
-// ── downloadModel (완전 수정됨) ─────────────────────────────────────────────
-// downloadModel 함수 수정
+// downloadModel 함수 - 프록시 사용!
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
@@ -72,35 +71,39 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
-  try {
-    // 🔥 직접 fetch (no-cors 모드)
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      mode: 'no-cors', // 🔥 CORS 완전 우회!
-    });
+  // 🔥 CORS-anywhere 프록시 사용 (no-cors 대신!)
+  const PROXY = "https://cors-anywhere.herokuapp.com/";
+  const proxiedUrl = PROXY + url;
 
-    debugLog('📥 [downloadModel] no-cors 응답', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      type: response.type,
-    });
+  debugLog('📥 [downloadModel] 프록시 요청', { proxiedUrl });
 
-    // no-cors 모드에서는 ok, status 등을 신뢰할 수 없음
-    // 그래서 ArrayBuffer 변환 시도
-    const arrayBuffer = await response.arrayBuffer();
-    debugLog('✅ [downloadModel] 다운로드 완료!', {
-      byteLength: arrayBuffer.byteLength,
-    });
-    
-    return arrayBuffer;
-  } catch (err) {
-    debugLog('❌ [downloadModel] fetch 실패!', err);
-    throw err;
+  const response = await fetch(proxiedUrl, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    mode: 'cors', // 🔥 CORS 모드 (프록시가 처리)
+  });
+
+  debugLog('📥 [downloadModel] 프록시 응답', {
+    status: response.status,
+    statusText: response.statusText,
+    ok: response.ok,
+    headers: Object.fromEntries(response.headers.entries()),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${url}`);
   }
+
+  const arrayBuffer = await response.arrayBuffer();
+  debugLog('✅ [downloadModel] 다운로드 완료!', {
+    byteLength: arrayBuffer.byteLength,
+    sizeMB: (arrayBuffer.byteLength / 1e6).toFixed(2) + ' MB'
+  });
+
+  return arrayBuffer;
 }
+
 // sdTurboEngine.ts - makeSession 함수 수정
 async function makeSession(
   url: string,
