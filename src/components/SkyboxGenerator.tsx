@@ -173,86 +173,92 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const localBlocked = false;
 
   return (
-    <div className="gradient-card p-8 rounded-xl shadow-elevation border border-border/50">
-      <div className="space-y-6">
-
-        {/* 헤더 */}
-        <div className="space-y-2">
-          <Label className="text-lg font-semibold flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            AI 스카이박스 생성
-          </Label>
-
-          <p className="text-sm text-muted-foreground">
-            {selected === "local"
-              ? "브라우저 캔버스로 즉시 하늘 텍스처를 생성합니다. 서버·API 키·과금 전부 없음."
-              : "먼저 순수 하늘 1장을 만들고 6면으로 잘라 붙여 이음새를 없앤 뒤, 달·구름 같은 오브젝트만 면별로 자연스럽게 합성합니다."}
+  <div className="gradient-card p-8 rounded-xl shadow-elevation border border-border/50">
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div className="space-y-2">
+        <Label className="text-lg font-semibold flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          AI 스카이박스 생성
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          {selected === "local"
+            ? "브라우저 캔버스로 즉시 하늘 텍스처를 생성합니다. 서버·API 키·과금 전부 없음."
+            : "먼저 순수 하늘 1장을 만들고 6면으로 잘라 붙여 이음새를 없앤 뒤, 달·구름 같은 오브젝트만 면별로 자연스럽게 합성합니다."}
+        </p>
+        {selected !== "local" && (
+          <p className="text-xs text-muted-foreground">
+            예: "보라색 오로라 밤하늘, 왼쪽에 큰 보름달 하나, 앞면에 푹신한 구름 몇 개"
           </p>
+        )}
+      </div>
 
-          {selected !== "local" && (
-            <p className="text-xs text-muted-foreground">
-              예: "보라색 오로라 밤하늘, 왼쪽에 큰 보름달 하나, 앞면에 푹신한 구름 몇 개"
-            </p>
-          )}
-
-        </div>
-
-        {/* 폼 */}
-        <div className="space-y-4">
-
-          {/* AI 제공자 선택 */}
-          <div className="space-y-2">
-            <Label className="text-sm">AI 제공자 선택</Label>
-            <Select
-              value={selected}
-              onValueChange={(v) => setSelected(v as Selection)}
-              disabled={isGenerating}
-            >
-              <SelectTrigger className="h-11 bg-background/50 border-border/50">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="local">
-                  🎨 로컬 캔버스 (완전 무료, 즉시 생성)
-                </SelectItem>
-                <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
-                {available.map((p) => (
-                  <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {selected === "local"
-                ? "프롬프트 키워드(밤/노을/오로라/폭풍)에 맞춰 캔버스로 즉시 그립니다."
-                : "클라우드 API를 통해 고품질 이미지를 생성합니다."}
-            </p>
-          </div>
-
-          {/* 프롬프트 */}
-          <Input
-            id="prompt"
-            placeholder="보라 오로라 하늘, 왼쪽에 큰 달 하나..."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="h-12 bg-background/50 border-border/50 focus:border-primary transition-all"
+      {/* 폼 */}
+      <div className="space-y-4">
+        {/* AI 제공자 선택 */}
+        <div className="space-y-2">
+          <Label className="text-sm">AI 제공자 선택</Label>
+          <Select
+            value={selected}
+            onValueChange={(v) => setSelected(v as Selection)}
             disabled={isGenerating}
-          />
-
-          {/* 생성 버튼 */}
-          <Button
-  onClick={handleGenerate}
-  disabled={isGenerating || localBlocked} // ← hasHFToken 제거!
-  className="w-full h-12 gradient-primary hover:opacity-90 transition-all shadow-glow text-lg font-semibold"
->
-
-          {/* 진행 상태 */}
-          {isGenerating && status && (
-            <p className="text-sm text-muted-foreground text-center animate-pulse">
-              {status}
-            </p>
-          )}
+          >
+            <SelectTrigger className="h-11 bg-background/50 border-border/50">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="local">
+                🎨 로컬 캔버스 (완전 무료, 즉시 생성)
+              </SelectItem>
+              <SelectItem value="auto">자동 (우선순위대로 폴백)</SelectItem>
+              {available.map((p) => (
+                <SelectItem key={p} value={p}>{PROVIDER_LABEL[p]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {selected === "local"
+              ? "프롬프트 키워드(밤/노을/오로라/폭풍)에 맞춰 캔버스로 즉시 그립니다."
+              : "클라우드 API를 통해 고품질 이미지를 생성합니다."}
+          </p>
         </div>
+
+        {/* 프롬프트 */}
+        <Input
+          id="prompt"
+          placeholder="보라 오로라 하늘, 왼쪽에 큰 달 하나..."
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          className="h-12 bg-background/50 border-border/50 focus:border-primary transition-all"
+          disabled={isGenerating}
+        />
+
+        {/* 생성 버튼 */}
+        <Button
+          onClick={handleGenerate}
+          disabled={isGenerating || localBlocked}
+          className="w-full h-12 gradient-primary hover:opacity-90 transition-all shadow-glow text-lg font-semibold"
+        >
+          {isGenerating ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              생성 중...
+            </>
+          ) : (
+            <>
+              <Sparkles className="mr-2 h-5 w-5" />
+              스카이박스 생성
+            </>
+          )}
+        </Button>
+
+        {/* 진행 상태 */}
+        {isGenerating && status && (
+          <p className="text-sm text-muted-foreground text-center animate-pulse">
+            {status}
+          </p>
+        )}
       </div>
     </div>
-  );
-};
+  </div>
+);
