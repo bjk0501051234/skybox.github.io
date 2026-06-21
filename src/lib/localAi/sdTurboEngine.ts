@@ -49,6 +49,7 @@ async function getOrt(): Promise<OrtMod> {
 }
 
 // sdTurboEngine.ts - downloadModel 함수 수정
+// sdTurboEngine.ts - downloadModel 함수 수정
 async function downloadModel(url: string, onS?: (s: string) => void) {
   // 1. 토큰 가져오기
   const { data } = await supabase
@@ -80,32 +81,6 @@ async function downloadModel(url: string, onS?: (s: string) => void) {
   const r = await fetch(downloadUrl, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
-
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
-
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
-
-  const total  = +(r.headers.get("content-length") ?? 0);
-  const reader = r.body!.getReader();
-  const chunks: Uint8Array[] = [];
-  let got = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    got += value.length;
-    if (total > 0) {
-      const pct = Math.round((got / total) * 100);
-      onS?.(`${pct}%  (${(got / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB)`);
-    }
-
-  const buf = new Uint8Array(got);
-  let off = 0;
-  for (const c of chunks) { buf.set(c, off); off += c.length; }
-  return buf.buffer;
-}
-
 
 async function makeSession(
   url: string,
