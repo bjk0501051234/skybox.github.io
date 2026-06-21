@@ -5,12 +5,12 @@ type OrtMod = typeof import("onnxruntime-web");
 type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
 type OrtTens = InstanceType<OrtMod["Tensor"]>;
 
-// ── 모델 URL ────────────────────────────────────────────────────────────────
+// sdTurboEngine.ts - Git LFS 경로 사용!
 const HF = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
 const URLS = {
-  te: `${HF}text_encoder/model.onnx`,
-  un: `${HF}unet/model_fp16.onnx`,
-  vae: `${HF}vae_decoder/model.onnx`,
+  te: `${HF}resolve/main/text_encoder/model.onnx?download=1`, // LFS 경로!
+  un: `${HF}resolve/main/unet/model_fp16.onnx?download=1`,
+  vae: `${HF}resolve/main/vae_decoder/model.onnx?download=1`,
 };
 
 // ── DDPM 스케줄러 (alpha_cumprod) ────────────────────────────────────────────
