@@ -48,11 +48,9 @@ async function getOrt(): Promise<OrtMod> {
   return _ort;
 }
 
-async function downloadModel(
-  url: string,
-  onS?: (s: string) => void
-): Promise<ArrayBuffer> {
-  // 🔑 Settings에서 저장한 HF 토큰 가져오기
+// sdTurboEngine.ts - downloadModel 함수 수정
+async function downloadModel(url: string, onS?: (s: string) => void) {
+  // 1. 토큰 가져오기
   const { data } = await supabase
     .from("user_api_keys")
     .select("api_key")
@@ -60,30 +58,28 @@ async function downloadModel(
     .single();
 
   const token = data?.api_key;
-  if (!token) {
-    throw new Error(
-      "❌ HuggingFace 토큰이 없습니다.\n" +
-      "Settings 페이지에서 HuggingFace Access Token을 등록해주세요."
-    );
-  }
+  if (!token) throw new Error("❌ HF 토큰 없음!");
 
-  onS?.(`다운로드: ${url.split("/").pop()}`);
+  // 2. URL에서 파일명 추출
+  const path = url.replace(/.*\/resolve\/main\//, '');
   
-  // 🔥 CORS 우회 프록시 사용!
-  const PROXY = "https://cors-anywhere.herokuapp.com/";
-  const r = await fetch(PROXY + url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    }
+  // 3. HuggingFace API로 파일 정보 요청
+  const apiUrl = `https://huggingface.co/api/models/schmuell/sd-turbo-ort-web`;
+  const response = await fetch(apiUrl, {
+    headers: { 'Authorization': `Bearer ${token}` },
   });
+  const data = await response.json();
+  
+  // 4. LFS 파일의 실제 다운로드 URL 찾기
+  const file = data.siblings.find((f: any) => f.rfilename === path);
+  const downloadUrl = file?._links?.self;
+  
+  if (!downloadUrl) throw new Error("❌ 다운로드 URL을 찾을 수 없음!");
 
-  if (r.status === 401) {
-    throw new Error(
-      "❌ HuggingFace 토큰이 유효하지 않습니다.\n" +
-      "Settings에서 토큰을 다시 확인하고 등록해주세요."
-    );
-  }
+  // 5. 실제 파일 다운로드
+  const r = await fetch(downloadUrl, {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
 
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
 
@@ -134,6 +130,7 @@ async function makeSession(
       executionProviders: ["wasm"],
     });
   }
+}
 }
 
 async function ensureModels(onS?: (s: string) => void) {
