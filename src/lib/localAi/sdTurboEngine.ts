@@ -1,28 +1,16 @@
 // src/lib/localAi/sdTurboEngine.ts
-// SD-Turbo 브라우저 추론 (onnxruntime-web)
-// 모델: schmuell/SD-Turbo-ort-web (HuggingFace)
-// GTX 1080 (Pascal, no shader-f16): WebGPU 시도 → WASM 자동 폴백
-//
-// ⚠ 텐서 이름은 모델 버전마다 다를 수 있음.
-//   콘솔의 [TE/UN/VAE] inputs/outputs 로그 확인 후 필요 시 조정.
-// ⚠ 첫 실행 시 총 ~2.5 GB 다운로드 (이후 브라우저 캐시 유지).
-// ⚠ UNet은 fp16 ONNX → WebGPU 실패 시 WASM(CPU)으로 자동 전환.
-//   WASM은 느리지만 확실히 작동 (CPU 성능에 따라 30초~수분).
-
-
 import { supabase } from "@/integrations/supabase/client";
 
-// ── 타입 ────────────────────────────────────────────────────────────────────
-type OrtMod  = typeof import("onnxruntime-web");
+type OrtMod = typeof import("onnxruntime-web");
 type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
 type OrtTens = InstanceType<OrtMod["Tensor"]>;
 
-// ── 모델 URL (schmuell/SD-Turbo-ort-web) ────────────────────────────────────
-const HF   = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
+// ── 모델 URL ────────────────────────────────────────────────────────────────
+const HF = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
 const URLS = {
-  te:  `${HF}text_encoder/model.onnx`,  // FP32 ~246 MB
-  un:  `${HF}unet/model_fp16.onnx`,     // FP16 ~1.7 GB (WASM에선 FP32 처리)
-  vae: `${HF}vae_decoder/model.onnx`,   // FP32 ~95 MB
+  te: `${HF}text_encoder/model.onnx`,
+  un: `${HF}unet/model_fp16.onnx`,
+  vae: `${HF}vae_decoder/model.onnx`,
 };
 
 // ── DDPM 스케줄러 (alpha_cumprod) ────────────────────────────────────────────
