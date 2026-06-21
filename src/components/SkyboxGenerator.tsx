@@ -37,13 +37,8 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   const [status, setStatus] = useState<string>("");
   const [available, setAvailable] = useState<Provider[]>(["lovable"]);
   const [selected, setSelected] = useState<Selection>("local");
-  const [gpuOk, setGpuOk] = useState<boolean | null>(null);
   const { toast } = useToast();
 
-  // WebGPU 지원 여부 사전 체크
-  useEffect(() => {
-    setGpuOk("gpu" in navigator);
-  }, []);
 
   // 사용자 API 키 로드
   useEffect(() => {
