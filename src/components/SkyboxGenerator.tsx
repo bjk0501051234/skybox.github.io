@@ -79,26 +79,19 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      toast({ title: "프롬프트를 입력하세요", variant: "destructive" });
-      return;
-    }
-    setIsGenerating(true);
-    try {
-      let panorama: string;
-      let stickers: Sticker[] = [];
+  if (!prompt.trim()) {
+    toast({ title: "프롬프트를 입력하세요", variant: "destructive" });
+    return;
+  }
+  setIsGenerating(true);
+  try {
+    let panorama: string;
+    let stickers: Sticker[] = [];
 
-if (selected === "local") {
-  const optimizedPrompt =
-    await planWithWebLLM(prompt, setStatus);
-
-  panorama =
-    await generateWithSDTurbo(
-      optimizedPrompt,
-      setStatus
-    );
-
-} else {
+    if (selected === "local") {
+      const optimizedPrompt = await planWithWebLLM(prompt, setStatus);
+      panorama = await generateWithSDTurbo(optimizedPrompt, setStatus);
+    } else {
   // ── 클라우드 API 경로 (기존 그대로) ──────────────────────────────
         setStatus("순수 하늘 파노라마 생성 중...");
         const result = await callEdge({ action: "plan-and-panorama", prompt }) as {
