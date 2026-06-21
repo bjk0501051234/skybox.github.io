@@ -171,26 +171,16 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
 
           <p className="text-sm text-muted-foreground">
             {selected === "local"
-              ? "Transformers.js + WebGPU로 브라우저 안에서 실제 Stable Diffusion LCM을 실행합니다. 첫 실행 시 약 600 MB 다운로드 후 IndexedDB에 캐시됩니다."
+              ? "브라우저 캔버스로 즉시 하늘 텍스처를 생성합니다. 서버·API 키·과금 전부 없음."
               : "먼저 순수 하늘 1장을 만들고 6면으로 잘라 붙여 이음새를 없앤 뒤, 달·구름 같은 오브젝트만 면별로 자연스럽게 합성합니다."}
           </p>
 
-          {/* WebGPU 상태 배지 */}
-          {selected === "local" && gpuOk === false && (
-            <p className="text-xs text-destructive font-medium">
-              ⚠️ WebGPU 미지원 브라우저 — Chrome 113+ 또는 Edge 113+ 필요
-            </p>
-          )}
-          {selected === "local" && gpuOk === true && (
-            <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-              <Cpu className="h-3 w-3" /> WebGPU 사용 가능 · LCM DreamShaper v7
-            </p>
-          )}
           {selected !== "local" && (
             <p className="text-xs text-muted-foreground">
               예: "보라색 오로라 밤하늘, 왼쪽에 큰 보름달 하나, 앞면에 푹신한 구름 몇 개"
             </p>
           )}
+
         </div>
 
         {/* 폼 */}
