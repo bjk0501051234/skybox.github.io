@@ -121,12 +121,6 @@ async function downloadModel(
 }
 
 
-  const buf = new Uint8Array(got);
-  let off = 0;
-  for (const c of chunks) { buf.set(c, off); off += c.length; }
-  return buf.buffer;
-}
-
 async function makeSession(
   url: string,
   o: OrtMod,
