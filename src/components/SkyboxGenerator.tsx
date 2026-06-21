@@ -12,8 +12,7 @@ import {
 import { Cpu, Loader2, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-// createLocalSkyPanorama 제거 — WebGPU AI로 대체됨
-import { panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
+import { panoramaToCubemap, createLocalSkyPanorama, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 
 interface SkyboxGeneratorProps {
   onGenerated: (images: string[]) => void;
