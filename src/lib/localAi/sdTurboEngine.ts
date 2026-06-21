@@ -18,7 +18,7 @@ type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
 type OrtTens = InstanceType<OrtMod["Tensor"]>;
 
 // ── 모델 URL (schmuell/SD-Turbo-ort-web) ────────────────────────────────────
-const HF   = "https://huggingface.co/schmuell/sd-turbo-ort-web";
+const HF   = "https://huggingface.co/schmuell/sd-turbo-ort-web/";
 const URLS = {
   te:  `${HF}text_encoder/model.onnx`,  // FP32 ~246 MB
   un:  `${HF}unet/model_fp16.onnx`,     // FP16 ~1.7 GB (WASM에선 FP32 처리)
