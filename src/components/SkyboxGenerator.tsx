@@ -239,22 +239,27 @@ export const SkyboxGenerator = ({ onGenerated }: SkyboxGeneratorProps) => {
 
           {/* 생성 버튼 */}
           <Button
-            onClick={handleGenerate}
-            disabled={isGenerating || localBlocked}
-            className="w-full h-12 gradient-primary hover:opacity-90 transition-all shadow-glow text-lg font-semibold"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                생성 중...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-5 w-5" />
-                스카이박스 생성
-              </>
-            )}
-          </Button>
+  onClick={handleGenerate}
+  disabled={isGenerating || localBlocked || (selected === "local" && !hasHFToken)}
+  className="w-full h-12 gradient-primary hover:opacity-90 transition-all shadow-glow text-lg font-semibold"
+>
+  {isGenerating ? (
+    <>
+      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+      생성 중...
+    </>
+  ) : (selected === "local" && !hasHFToken) ? (
+    <>
+      🔑
+      HF 토큰 필요 (Settings)
+    </>
+  ) : (
+    <>
+      <Sparkles className="mr-2 h-5 w-5" />
+      스카이박스 생성
+    </>
+  )}
+</Button>
 
           {/* 진행 상태 */}
           {isGenerating && status && (
