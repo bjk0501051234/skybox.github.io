@@ -18,7 +18,7 @@ const CONFIG = {
   TEXT_BASE: "https://text.pollinations.ai",
 
   // ⭐ enter.pollinations.ai 에서 발급한 공개키(pk_...). 없으면 403 난다.
-  KEY: (import.meta.env.VITE_POLLINATIONS_KEY as string) || "",
+  KEY: (import.meta.env.VITE_POLLINATIONS_KEY as string) || "pk_cyNJfbAxeAJnGqQq",
 
   IMAGE_MODEL: "flux", // "flux"(고화질) / "turbo"(빠름)
   TEXT_MODEL: "openai",
