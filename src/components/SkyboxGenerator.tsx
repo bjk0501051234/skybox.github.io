@@ -1,5 +1,5 @@
-import { planWithWebLLM } from "@/lib/localAi/webllmPlanner";
-import { generateWithSDTurbo } from "@/lib/localAi/sdTurboEngine";
+import { planWithPollinations as planWithWebLLM } from "@/lib/localAi/pollinationsEngine";
+import { generateWithPollinations as generateWithSDTurbo } from "@/lib/localAi/pollinationsEngine";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
