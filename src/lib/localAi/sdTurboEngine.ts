@@ -47,6 +47,7 @@ async function getOrt(): Promise<OrtMod> {
 }
 
 // ── 🔥 XHR 다운로드 (마지막 희망) ─────────────────────────────────────────────
+// sdTurboEngine.ts - downloadModel 함수 (프록시 + XHR)
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
@@ -65,9 +66,13 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
+  // 🔥 CORS 프록시 + XHR
+  const PROXY = "https://cors-anywhere.herokuapp.com/";
+  const proxiedUrl = PROXY + url;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
+    xhr.open('GET', proxiedUrl, true);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.responseType = 'arraybuffer';
 
@@ -80,21 +85,19 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
 
     xhr.onload = () => {
       if (xhr.status === 200 || xhr.status === 206) {
-        debugLog('✅ [downloadModel] XHR 성공!', {
+        debugLog('✅ [downloadModel] 프록시+XHR 성공!', {
           byteLength: xhr.response.byteLength,
           sizeMB: (xhr.response.byteLength / 1e6).toFixed(2) + ' MB'
         });
         resolve(xhr.response);
-      } else if (xhr.status === 403) {
-        reject(new Error("❌ HuggingFace 토큰이 유효하지 않습니다."));
       } else {
         reject(new Error(`HTTP ${xhr.status}: ${url}`));
       }
     };
 
     xhr.onerror = () => {
-      debugLog('❌ [downloadModel] XHR 네트워크 에러!');
-      reject(new Error('Network error (XHR)'));
+      debugLog('❌ [downloadModel] 프록시+XHR 네트워크 에러!');
+      reject(new Error('Network error (Proxy+XHR)'));
     };
 
     xhr.send();
