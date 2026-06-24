@@ -1,5 +1,6 @@
 import { planWithPollinations as planWithWebLLM } from "@/lib/localAi/pollinationsEngine";
 import { generateWithPollinations as generateWithSDTurbo } from "@/lib/localAi/pollinationsEngine";
+import { panoramaToCubemap, FACE_ORDER, type FaceName } from "@/lib/equirectToCubemap";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
