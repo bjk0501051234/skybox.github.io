@@ -5,7 +5,7 @@ type OrtMod = typeof import("onnxruntime-web");
 type OrtSess = Awaited<ReturnType<OrtMod["InferenceSession"]["create"]>>;
 type OrtTens = InstanceType<OrtMod["Tensor"]>;
 
-// ── 모델 URL ────────────────────────────────────────────────────────────────
+// ── 모델 URL (공식 ONNX Runtime 저장소) ──────────────────────────────────────
 const URLS = {
   te: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/text_encoder/model.onnx",
   un: "https://huggingface.co/onnxruntime/sd-turbo/resolve/main/unet/model.onnx",
@@ -28,6 +28,7 @@ function buildAlphas(n = 1000): Float32Array {
 }
 const ALPHA_CP = buildAlphas();
 
+// ── 싱글톤 ──────────────────────────────────────────────────────────────────
 let _ort: OrtMod  | null = null;
 let _te:  OrtSess | null = null;
 let _un:  OrtSess | null = null;
@@ -51,10 +52,11 @@ async function getOrt(): Promise<OrtMod> {
   return _ort;
 }
 
-// downloadModel 함수 - arrayBuffer 변환 부분만 수정
+// ── downloadModel (토큰 인증 강화 + 프록시 제거) ─────────────────────────────
 async function downloadModel(url: string, onS?: (s: string) => void): Promise<ArrayBuffer> {
   debugLog('📥 [downloadModel] 시작', { url });
 
+  // 1. Supabase에서 HF 토큰 가져오기
   const { data, error } = await supabase
     .from("user_api_keys")
     .select("api_key")
@@ -66,61 +68,77 @@ async function downloadModel(url: string, onS?: (s: string) => void): Promise<Ar
   const token = data?.api_key;
   if (!token) {
     debugLog('❌ [downloadModel] 토큰 없음!');
-    throw new Error("❌ HuggingFace 토큰이 없습니다.");
+    throw new Error(
+      "❌ HuggingFace 토큰이 없습니다.\n" +
+      "Settings 페이지에서 HuggingFace Access Token을 등록해주세요."
+    );
   }
+  debugLog('✅ [downloadModel] 토큰 확인', token.slice(0, 10) + '...');
 
   onS?.(`다운로드: ${url.split("/").pop()}`);
 
-  const PROXY = "https://cors-anywhere.herokuapp.com/";
-  const proxiedUrl = PROXY + url;
-
-  debugLog('📥 [downloadModel] 프록시 요청', { proxiedUrl });
-
-  const response = await fetch(proxiedUrl, {
+  // 2. 🔥 프록시 제거 + 토큰 인증 강화 (403 해결)
+  const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     },
-    mode: 'cors',
   });
 
-  debugLog('📥 [downloadModel] 프록시 응답', {
+  debugLog('📥 [downloadModel] fetch 응답', {
     status: response.status,
     statusText: response.statusText,
     ok: response.ok,
-    headers: Object.fromEntries(response.headers.entries()),
-    contentType: response.headers.get('content-type'),
   });
+
+  if (response.status === 403) {
+    throw new Error(
+      "❌ HuggingFace 토큰이 유효하지 않습니다.\n" +
+      "Settings에서 토큰을 다시 확인하고 등록해주세요."
+    );
+  }
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${url}`);
   }
 
-  // 🔥 arrayBuffer 변환을 try-catch로 감싸고, Blob으로 먼저 읽어보기
-  try {
-    debugLog('📥 [downloadModel] arrayBuffer 변환 시도...');
-    
-    // 먼저 Blob으로 읽기
-    const blob = await response.blob();
-    debugLog('📥 [downloadModel] Blob 읽기 성공', {
-      size: blob.size,
-      type: blob.type,
-    });
+  // 3. 🔥 청크 단위로 읽기 (1.7 GB 메모리 대응)
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No reader available');
 
-    // Blob을 ArrayBuffer로 변환
-    const arrayBuffer = await blob.arrayBuffer();
-    debugLog('✅ [downloadModel] ArrayBuffer 변환 완료!', {
-      byteLength: arrayBuffer.byteLength,
-      sizeMB: (arrayBuffer.byteLength / 1e6).toFixed(2) + ' MB'
-    });
+  const chunks: Uint8Array[] = [];
+  let totalLength = 0;
+  const contentLength = parseInt(response.headers.get('content-length') || '0');
 
-    return arrayBuffer;
-  } catch (err) {
-    debugLog('❌ [downloadModel] 변환 실패!', err);
-    throw err;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    totalLength += value.length;
+
+    if (contentLength > 0 && onS) {
+      const pct = Math.min(100, Math.round((totalLength / contentLength) * 100));
+      onS?.(`${pct}% (${(totalLength / 1e6).toFixed(1)} / ${(contentLength / 1e6).toFixed(1)} MB)`);
+    }
   }
+
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  debugLog('✅ [downloadModel] 다운로드 완료!', {
+    byteLength: result.byteLength,
+    sizeMB: (result.byteLength / 1e6).toFixed(2) + ' MB'
+  });
+
+  return result.buffer;
 }
 
-// sdTurboEngine.ts - makeSession 함수 수정
+// ── makeSession (CPU + GPU 하이브리드) ──────────────────────────────────────
 async function makeSession(
   url: string,
   o: OrtMod,
@@ -129,14 +147,27 @@ async function makeSession(
   const buf = await downloadModel(url, onS);
   const opt = { graphOptimizationLevel: "all" as const };
 
-  // 🔥 WebGPU 시도하지 않고 바로 WASM 사용!
-  console.warn("[SD] GPU 메모리 부족 감지 → WASM 강제 사용!");
-  onS?.("GPU 메모리 부족 → CPU(WASM) 모드로 전환 중...");
-  
-  return await o.InferenceSession.create(new Uint8Array(buf), {
-    ...opt,
-    executionProviders: ["wasm"], // 🔥 WASM 강제!
-  });
+  // 🔥 CPU + GPU 하이브리드: WebGPU 시도 → 실패 시 WASM(CPU) 폴백
+  try {
+    debugLog('🔧 [makeSession] WebGPU 세션 생성 시도...');
+    onS?.("GPU(WebGPU) 모드 시도 중...");
+    const session = await o.InferenceSession.create(new Uint8Array(buf), {
+      ...opt,
+      executionProviders: ["webgpu"],
+    });
+    debugLog('✅ [makeSession] WebGPU 세션 생성 성공!');
+    return session;
+  } catch (e) {
+    console.warn("[SD] WebGPU 실패 → WASM(CPU) 폴백:", e);
+    debugLog('🔧 [makeSession] WebGPU 실패, WASM(CPU) 폴백 시도...');
+    onS?.("GPU 메모리 부족 → CPU(WASM) 모드로 전환 중... (시간이 오래 걸릴 수 있음)");
+    const session = await o.InferenceSession.create(new Uint8Array(buf), {
+      ...opt,
+      executionProviders: ["wasm"],
+    });
+    debugLog('✅ [makeSession] WASM(CPU) 세션 생성 성공!');
+    return session;
+  }
 }
 
 // ── ensureModels ────────────────────────────────────────────────────────────
@@ -181,13 +212,12 @@ export async function generateWithSDTurbo(
   const o = await getOrt();
   await ensureModels(onS);
 
-  // 1. 토크나이즈 (CLIP ViT-L/14 tokenizer — SD 1.x 계열 표준)
+  // 1. 토크나이즈
   onS?.("텍스트 토크나이즈 중...");
   if (!_tok) {
     const { CLIPTokenizer } = await import("@huggingface/transformers");
     _tok = await CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14");
   }
-  // v3 transformers.js: tokenizer() 는 from_pretrained 이후 동기 호출
   const enc = _tok(prompt, {
     padding: "max_length",
     max_length: 77,
@@ -199,53 +229,41 @@ export async function generateWithSDTurbo(
 
   // 2. 텍스트 인코딩
   onS?.("텍스트 인코딩 중...");
-  console.log("[TE] inputs:", _te!.inputNames, "outputs:", _te!.outputNames);
-
-  // 텍스트 인코더 입력 (int32)
   const inputIdsTensor: OrtTens = new o.Tensor(
     "int32",
     new Int32Array(ids),
     [1, 77]
   );
   const teOut   = await _te!.run({ [_te!.inputNames[0]]: inputIdsTensor });
-  const textEmb = teOut[_te!.outputNames[0]]; // [1, 77, 768]
+  const textEmb = teOut[_te!.outputNames[0]];
 
-  // 3. 노이즈 샘플링 + UNet (SD-Turbo 1-step, t=999)
-  onS?.("UNet 추론 중... (WASM이면 수분 소요 가능)");
-  console.log("[UN] inputs:", _un!.inputNames, "outputs:", _un!.outputNames);
-
+  // 3. UNet 추론
+  onS?.("UNet 추론 중... (시간이 오래 걸릴 수 있음)");
   const T    = 999;
-  const a    = ALPHA_CP[T];            // alpha_cumprod[999]
-  const sqA  = Math.sqrt(a);           // sqrt(alpha)
-  const sqoA = Math.sqrt(1 - a);       // sqrt(1-alpha)
-  const sigma = sqoA / sqA;            // ≈ 26.99 (스케일 팩터)
+  const a    = ALPHA_CP[T];
+  const sqA  = Math.sqrt(a);
+  const sqoA = Math.sqrt(1 - a);
+  const sigma = sqoA / sqA;
 
   const L     = 4 * 64 * 64;
   const noise = gaussianNoise(L);
   const latent = noise.map(n => n * sigma);
 
-  // 입력 텐서명 자동 탐지 (모델마다 다를 수 있음)
-  const sName = _un!.inputNames.find(n => n === "sample")
-             ?? _un!.inputNames[0];
-  const tName = _un!.inputNames.find(n => n.includes("timestep"))
-             ?? _un!.inputNames[1];
-  const eName = _un!.inputNames.find(n => n.includes("encoder_hidden"))
-             ?? _un!.inputNames[2];
+  const sName = _un!.inputNames.find(n => n === "sample") ?? _un!.inputNames[0];
+  const tName = _un!.inputNames.find(n => n.includes("timestep")) ?? _un!.inputNames[1];
+  const eName = _un!.inputNames.find(n => n.includes("encoder_hidden")) ?? _un!.inputNames[2];
 
   const unetInput: Record<string, OrtTens> = {
-    // timestep: float32 (일부 모델은 int64 필요 —
-    //   그럴 때: new o.Tensor("int64", new BigInt64Array([BigInt(T)]), [1]))
     [sName]: new o.Tensor("float32", new Float32Array(latent), [1, 4, 64, 64]),
     [tName]: new o.Tensor("float32", new Float32Array([T]),    [1]),
     [eName]: textEmb,
   };
 
   const unOut  = await _un!.run(unetInput);
-  const pKey   = _un!.outputNames.find(n => n.includes("sample"))
-              ?? _un!.outputNames[0];
+  const pKey   = _un!.outputNames.find(n => n.includes("sample")) ?? _un!.outputNames[0];
   const pred   = unOut[pKey].data as Float32Array;
 
-  // DDIM 1-step: x0 = (latent - sqrt(1-a)*pred) / sqrt(a)
+  // DDIM 1-step
   const x0 = new Float32Array(L);
   for (let i = 0; i < L; i++) {
     x0[i] = (latent[i] - sqoA * pred[i]) / sqA;
@@ -253,19 +271,16 @@ export async function generateWithSDTurbo(
 
   // 4. VAE 디코드
   onS?.("VAE 디코딩 중...");
-  console.log("[VAE] inputs:", _vae!.inputNames, "outputs:", _vae!.outputNames);
-
   const VAE_SCALE = 0.18215;
   const vaeIn    = x0.map(v => v / VAE_SCALE);
-  const lvName   = _vae!.inputNames.find(n => n.includes("latent"))
-                ?? _vae!.inputNames[0];
+  const lvName   = _vae!.inputNames.find(n => n.includes("latent")) ?? _vae!.inputNames[0];
 
   const vaeOut = await _vae!.run({
     [lvName]: new o.Tensor("float32", new Float32Array(vaeIn), [1, 4, 64, 64]),
   });
-  const imgRaw = vaeOut[_vae!.outputNames[0]].data as Float32Array; // [1,3,512,512]
+  const imgRaw = vaeOut[_vae!.outputNames[0]].data as Float32Array;
 
-  // 5. CHW Float32 → RGBA Canvas (denormalize [-1,1] → [0,255])
+  // 5. 이미지 변환
   onS?.("이미지 변환 중...");
   const W = 512, H = 512, N = W * H;
   const c   = document.createElement("canvas");
@@ -283,8 +298,7 @@ export async function generateWithSDTurbo(
   }
   ctx.putImageData(px, 0, 0);
 
-  // 6. 512×512 → 2048×1024 파노라마 타일링
-  //    (SD-Turbo는 512×512 고정 → 가로 4회 타일로 파노라마 근사)
+  // 6. 파노라마
   const pano = document.createElement("canvas");
   pano.width  = 2048;
   pano.height = 1024;
