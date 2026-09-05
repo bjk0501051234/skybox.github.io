@@ -1,0 +1,4 @@
+project_id = "ebugwsydyapfpjcewkiq"
+
+[functions.generate-skybox]
+verify_jwt = false
